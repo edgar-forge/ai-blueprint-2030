@@ -1,0 +1,14 @@
+{
+  "name": "nightly-synapse",
+  "version": "1.0.0",
+  "description": "매일 저녁 볼트의 수정된 노트를 분류하고 검증하는 자동 시냅스",
+  "type": "module",
+  "scripts": {
+    "start": "node scheduler.js",
+    "run-now": "node run-now.js",
+    "audit": "node run-audit.js"
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3"
+  }
+}
