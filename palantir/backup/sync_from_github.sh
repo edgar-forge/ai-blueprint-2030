@@ -1,78 +1,34 @@
 #!/bin/bash
-# =============================================================================
-# GitHub <-> Obsidian Vault Bidirectional Sync
-# =============================================================================
-# 1. Push local changes to GitHub
-# 2. Pull remote changes (e.g. Telegram pipeline memos) to local
-#
-# Placeholders (replaced by setup.sh):
-#   {VAULT_PATH} — Absolute path to the Obsidian vault
-#   {LOG_PATH}   — Absolute path to the sync log file
-# =============================================================================
+# GitHub ↔ Obsidian Vault 양방향 동기화 스크립트
+# 1. 로컬 변경 → GitHub push (삭제/이동/수정 반영)
+# 2. GitHub 변경 → 로컬 pull (텔레그램 메모 등 수신)
 
 set -e
 
-VAULT="{VAULT_PATH}"
-LOG="{LOG_PATH}"
-
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
-
-# ---------------------------------------------------------------------------
-# Safety: ensure vault exists and is a git repo
-# ---------------------------------------------------------------------------
-if [ ! -d "$VAULT" ]; then
-    echo "${TIMESTAMP}: Vault not found: ${VAULT}" >> "$LOG"
-    exit 1
-fi
+VAULT="${VAULT_PATH:-/path/to/your/obsidian-vault}"
+LOG="${BACKUP_DIR:-$HOME/ObsidianBackup}/sync.log"
 
 cd "$VAULT" || exit 1
 
-if [ ! -d ".git" ]; then
-    echo "${TIMESTAMP}: Not a git repository: ${VAULT}" >> "$LOG"
-    exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# 1. Push local changes to GitHub
-# ---------------------------------------------------------------------------
+# 1. 로컬 변경사항을 GitHub에 push
 if [ -n "$(git status --porcelain)" ]; then
+    # .env, 시크릿 파일이 추가되지 않도록 .gitignore 기반으로 추가
     git add -A
-
-    # Safety check: remove sensitive files from staging
-    # Prevents accidental commit of .env, credentials, API keys, etc.
-    SENSITIVE_PATTERN='\.env$|\.env\.|credentials|secret|\.key$|\.pem$|\.p12$|token'
-    STAGED_SENSITIVE=$(git diff --cached --name-only | grep -iE "$SENSITIVE_PATTERN" 2>/dev/null || true)
-
-    if [ -n "$STAGED_SENSITIVE" ]; then
-        echo "${TIMESTAMP}: [WARN] Removing sensitive files from staging:" >> "$LOG"
-        echo "$STAGED_SENSITIVE" >> "$LOG"
-        echo "$STAGED_SENSITIVE" | xargs -r git reset HEAD -- 2>/dev/null
+    # .env 등 민감 파일이 stage에 올라왔으면 제거
+    git diff --cached --name-only | grep -iE '\.env$|credentials|secret|\.key$|\.pem$' | xargs -r git reset HEAD -- 2>/dev/null
+    git commit -m "auto-sync: $(date '+%Y-%m-%d %H:%M') 볼트 변경사항 동기화" --quiet 2>/dev/null || true
+    if ! git push origin main --quiet 2>/dev/null; then
+        echo "$(date '+%Y-%m-%d %H:%M'): push 실패" >> "$LOG"
+        exit 1
     fi
-
-    # Only commit if there are still staged changes after safety removal
-    if [ -n "$(git diff --cached --name-only)" ]; then
-        git commit -m "auto-sync: ${TIMESTAMP} 볼트 변경사항 동기화" --quiet 2>/dev/null || true
-
-        if ! git push origin main --quiet 2>/dev/null; then
-            echo "${TIMESTAMP}: push failed" >> "$LOG"
-            exit 1
-        fi
-        echo "${TIMESTAMP}: push complete" >> "$LOG"
-    else
-        echo "${TIMESTAMP}: no changes to push (sensitive files excluded)" >> "$LOG"
-    fi
-else
-    echo "${TIMESTAMP}: no local changes" >> "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M'): push 완료" >> "$LOG"
 fi
 
-# ---------------------------------------------------------------------------
-# 2. Pull remote changes (Telegram memos, other devices, etc.)
-# ---------------------------------------------------------------------------
+# 2. GitHub 변경사항을 로컬로 pull (텔레그램 메모 등)
 if ! git pull --no-rebase origin main --quiet 2>/dev/null; then
-    echo "${TIMESTAMP}: pull failed (possible merge conflict). Manual resolution required." >> "$LOG"
-    # Safely abort merge on conflict
+    echo "$(date '+%Y-%m-%d %H:%M'): pull 실패 (충돌 가능성). 수동 확인 필요." >> "$LOG"
+    # 충돌 시 merge 취소하고 원래 상태로 복원
     git merge --abort 2>/dev/null || true
     exit 1
 fi
-
-echo "${TIMESTAMP}: sync complete" >> "$LOG"
+echo "$(date '+%Y-%m-%d %H:%M'): pull 완료" >> "$LOG"

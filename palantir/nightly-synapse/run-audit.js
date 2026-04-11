@@ -1,5 +1,5 @@
-// run-now.js — 즉시 실행용 (테스트 & 수동 실행)
-import { runNightlySynapse } from './synapse.js';
+// run-audit.js — 감사 에이전트 즉시 실행
+import { runAudit } from './auditor.js';
 
 // 무한루프 방지: 15분 후 강제 종료
 const HARD_KILL_MS = 15 * 60 * 1000;
@@ -8,13 +8,13 @@ const killTimer = setTimeout(() => {
   process.exit(1);
 }, HARD_KILL_MS);
 
-runNightlySynapse()
+runAudit()
   .then(() => {
     clearTimeout(killTimer);
-    console.log('\n완료.');
+    console.log('\n감사 완료.');
   })
   .catch(err => {
     clearTimeout(killTimer);
-    console.error('실행 실패:', err);
+    console.error('감사 실패:', err);
     process.exit(1);
   });

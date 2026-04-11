@@ -1,47 +1,16 @@
 #!/bin/bash
-# =============================================================================
-# Obsidian Vault Daily Backup
-# =============================================================================
-# Creates a compressed tar.gz backup of the vault.
-# Automatically deletes backups older than 7 days.
-#
-# Placeholders (replaced by setup.sh):
-#   {VAULT_PATH}  — Absolute path to the Obsidian vault
-#   {BACKUP_DIR}  — Absolute path to the backup directory
-# =============================================================================
+# Obsidian Vault 일일 백업 스크립트
+# 압축 파일명: ObsidianVault_YYYY-MM-DD.tar.gz
 
-set -e
-
-VAULT="{VAULT_PATH}"
-BACKUP_DIR="{BACKUP_DIR}"
+VAULT="${VAULT_PATH:-/path/to/your/obsidian-vault}"
+BACKUP_DIR="${BACKUP_DIR:-$HOME/ObsidianBackup}"
 DATE=$(date +%Y-%m-%d)
 FILENAME="ObsidianVault_${DATE}.tar.gz"
 
-# ---------------------------------------------------------------------------
-# Safety checks
-# ---------------------------------------------------------------------------
-if [ ! -d "$VAULT" ]; then
-    echo "$(date): ERROR — Vault not found: ${VAULT}"
-    exit 1
-fi
+# 압축 백업
+tar -czf "${BACKUP_DIR}/${FILENAME}" -C "$(dirname "$VAULT")" "$(basename "$VAULT")"
 
-if [ ! -d "$BACKUP_DIR" ]; then
-    mkdir -p "$BACKUP_DIR"
-fi
-
-# ---------------------------------------------------------------------------
-# Create compressed backup
-# ---------------------------------------------------------------------------
-# Exclude .git and .obsidian/cache to reduce size
-tar -czf "${BACKUP_DIR}/${FILENAME}" \
-    --exclude='.git' \
-    --exclude='.obsidian/cache' \
-    --exclude='.smart-env' \
-    -C "$(dirname "$VAULT")" "$(basename "$VAULT")"
-
-# ---------------------------------------------------------------------------
-# Retention: delete backups older than 7 days
-# ---------------------------------------------------------------------------
+# 7일 이상 된 백업 자동 삭제 (디스크 관리)
 find "$BACKUP_DIR" -name "ObsidianVault_*.tar.gz" -mtime +7 -delete
 
-echo "$(date): Backup completed — ${FILENAME} ($(du -h "${BACKUP_DIR}/${FILENAME}" | cut -f1))"
+echo "$(date): Backup completed - ${FILENAME}"

@@ -1,98 +1,72 @@
-import { getTodayModifiedNotes } from "./detector.js";
-import { classifyNotes } from "./classifier.js";
-import { generateReport } from "./report.js";
-import { sendNotification } from "./notify.js";
+// synapse.js — 핵심 로직: 감지 → 분류 → 리포트
+import { getTodayModifiedNotes, getExistingSlipBoxNotes } from './detector.js';
+import { classifyNote } from './classifier.js';
+import { generateAndSaveReport } from './report.js';
+import { notifySynapseResult } from './notify.js';
 
-const TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
-const MAX_CONSECUTIVE_FAILURES = 3;
+const VAULT_DIR = process.env.VAULT_DIR
+  || '/path/to/your/obsidian-vault';
 
-const DEFAULT_VAULT_DIR = process.env.VAULT_DIR || "{VAULT_PATH}";
+// ─── 상수 ───
+const MAX_TOTAL_MS = 10 * 60 * 1000;  // 전체 시간 제한 10분
+const MAX_CONSECUTIVE_FAILURES = 3;    // 연속 실패 허용 횟수
 
-/**
- * Runs the full Nightly Synapse pipeline:
- * detect -> classify -> report -> notify.
- *
- * Returns { success, reportPath, results, error }.
- */
-export const runSynapse = async (options = {}) => {
-  const {
-    vaultDir = DEFAULT_VAULT_DIR,
-    groundTruthPath,
-  } = options;
+export async function runNightlySynapse() {
+  console.log('오늘 수정된 노트 탐색 중...');
+
+  const todayNotes = getTodayModifiedNotes(VAULT_DIR);
+  if (todayNotes.length === 0) {
+    console.log('오늘 수정된 노트 없음. 종료.');
+    return;
+  }
+  console.log(`${todayNotes.length}개 노트 발견:`);
+  todayNotes.forEach(n => console.log(`  - ${n.relativePath}`));
+
+  const existingNotes = getExistingSlipBoxNotes(VAULT_DIR);
+  console.log(`기존 Slip-Box 노트: ${existingNotes.length}개`);
 
   const startTime = Date.now();
+  let consecutiveFailures = 0;
 
-  const checkTimeout = () => {
-    if (Date.now() - startTime > TOTAL_TIMEOUT_MS) {
-      throw new Error("Synapse 총 실행 시간 초과 (10분)");
+  const results = [];
+  for (const note of todayNotes) {
+    if (Date.now() - startTime > MAX_TOTAL_MS) {
+      console.log('전체 시간 제한(10분) 초과 — 중단');
+      break;
     }
-  };
-
-  console.log("=".repeat(50));
-  console.log("[synapse] Nightly Synapse 시작");
-  console.log(`[synapse] Vault: ${vaultDir}`);
-  console.log(`[synapse] 시작 시각: ${new Date().toISOString()}`);
-  console.log("=".repeat(50));
-
-  try {
-    // Step 1: Detect today's modified notes
-    checkTimeout();
-    const modifiedNotes = getTodayModifiedNotes(vaultDir);
-
-    if (modifiedNotes.length === 0) {
-      console.log("[synapse] 오늘 수정된 노트가 없습니다. 종료합니다.");
-      sendNotification([], "");
-      return { success: true, reportPath: null, results: [], error: null };
-    }
-
-    console.log(`[synapse] ${modifiedNotes.length}개 노트 분류 시작...`);
-
-    // Step 2: Classify notes with consecutive failure tracking
-    checkTimeout();
-    const results = [];
-    let consecutiveFailures = 0;
-
-    for (const note of modifiedNotes) {
-      checkTimeout();
-
-      const classifierOptions = groundTruthPath ? { groundTruthPath } : {};
-      const [result] = classifyNotes([note], classifierOptions);
-      results.push(result);
-
-      if (result.error) {
-        consecutiveFailures += 1;
-        console.warn(
-          `[synapse] 연속 실패 ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}: ${result.fileName}`
-        );
-
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-          const msg = `연속 ${MAX_CONSECUTIVE_FAILURES}회 실패로 중단합니다.`;
-          console.error(`[synapse] ${msg}`);
-
-          const reportPath = generateReport(vaultDir, results);
-          sendNotification(results, reportPath);
-
-          return { success: false, reportPath, results, error: msg };
-        }
-      } else {
-        consecutiveFailures = 0;
+    console.log(`분류 중: ${note.relativePath}`);
+    try {
+      const classification = await classifyNote(note, existingNotes, VAULT_DIR);
+      results.push({ note: note.file, relativePath: note.relativePath, classification });
+      consecutiveFailures = 0;
+    } catch (err) {
+      console.error(`  분류 실패: ${err.message}`);
+      results.push({
+        note: note.file,
+        relativePath: note.relativePath,
+        classification: { error: err.message }
+      });
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        console.log(`연속 ${MAX_CONSECUTIVE_FAILURES}회 실패 — 중단`);
+        break;
       }
     }
-
-    // Step 3: Generate report
-    checkTimeout();
-    const reportPath = generateReport(vaultDir, results);
-
-    // Step 4: Send notification
-    sendNotification(results, reportPath);
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[synapse] 완료. 소요 시간: ${elapsed}초`);
-
-    return { success: true, reportPath, results, error: null };
-  } catch (err) {
-    console.error(`[synapse] 치명적 오류: ${err.message}`);
-    sendNotification([], "");
-    return { success: false, reportPath: null, results: [], error: err.message };
   }
-};
+
+  // 4. 리포트 생성
+  const reportPath = generateAndSaveReport(results, VAULT_DIR);
+  console.log(`리포트 저장 완료: ${reportPath}`);
+
+  // 5. 결과 요약
+  const promotes = results.filter(r => r.classification?.action === 'slip_box_promote');
+  console.log(`\n=== 결과 요약 ===`);
+  console.log(`총 처리: ${results.length}개`);
+  console.log(`Slip-Box 승격 후보: ${promotes.length}개`);
+  console.log(`리포트: ${reportPath}`);
+
+  // 6. macOS 알림
+  notifySynapseResult(results);
+
+  return { results, reportPath };
+}

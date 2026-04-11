@@ -1,134 +1,102 @@
-import fs from "node:fs";
-import { spawnSync } from "node:child_process";
+// classifier.js — Claude CLI로 Slip-Box 분류 판정 (별도 API 키 불필요)
+import fs from 'fs';
+import path from 'path';
 
-const DEFAULT_GROUND_TRUTH_PATH =
-  "{VAULT_PATH}/2. Area of Responsibility/AI 설정/AI_세컨드브레인_Ground_Truth.md";
-
-const TIMEOUT_MS = 120_000;
+// ─── 상수 ───
+const MAX_CONTENT_CHARS = 8000;  // 분류 시 노트 본문 최대 길이
+const MAX_BUFFER_BYTES = 1024 * 1024;
+const CLASSIFY_TIMEOUT_MS = 60_000;
 
 /**
- * Loads Ground Truth markdown content from disk.
+ * Ground Truth 문서를 읽어서 분류 프롬프트의 기준으로 사용
  */
-const loadGroundTruth = (groundTruthPath = DEFAULT_GROUND_TRUTH_PATH) => {
-  try {
-    return fs.readFileSync(groundTruthPath, "utf-8");
-  } catch (err) {
-    console.error(`[classifier] Failed to load Ground Truth: ${err.message}`);
-    return null;
+function loadGroundTruth(vaultDir) {
+  const gtPath = path.join(
+    vaultDir,
+    '2. Area of Responsibility/AI 설정/AI_세컨드브레인_Ground_Truth.md'
+  );
+  if (fs.existsSync(gtPath)) {
+    return fs.readFileSync(gtPath, 'utf-8');
   }
-};
+  return '';
+}
 
 /**
- * Strips markdown code-block fences (```json ... ```) from a string.
+ * 단일 노트를 분류 — claude CLI의 -p (print) 모드 사용
  */
-const stripCodeBlocks = (raw) => {
-  const trimmed = raw.trim();
-  const fencePattern = /^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/;
-  const match = trimmed.match(fencePattern);
-  return match ? match[1].trim() : trimmed;
-};
+export async function classifyNote(note, existingSlipBoxNotes, vaultDir) {
+  const groundTruth = loadGroundTruth(vaultDir);
 
-/**
- * Builds the classification prompt for a single note.
- */
-const buildPrompt = (note, groundTruth) => `
-당신은 옵시디언 볼트의 노트 분류 전문가입니다.
-아래 Ground Truth 규칙에 따라 노트를 분석하고 JSON으로 응답하세요.
+  const prompt = `당신은 성원의 옵시디언 Zettelkasten/Slip-Box 분류 전문가입니다.
+아래의 Ground Truth 문서를 기준으로 노트를 분석하세요.
 
-## Ground Truth
+## Ground Truth (절대 기준)
 ${groundTruth}
 
-## 분류 대상 노트
-- 파일명: ${note.fileName}
-- 경로: ${note.filePath}
-- 수정시각: ${note.mtime}
+## 분석할 노트
+- 파일명: ${note.file}
+- 위치: ${note.relativePath}
 - 내용:
-${note.content}
+${note.content.slice(0, MAX_CONTENT_CHARS)}
 
-## 응답 형식 (JSON만 출력)
+## 기존 Slip-Box 영구노트 목록 (연결 참고용)
+${existingSlipBoxNotes.join('\n')}
+
+## 작업 지침
+1. PARA 분류 기준(A-1)에 따라 이 노트의 타입을 판정하세요.
+2. Slip-Box 승격 후보라면:
+   - 루만 넘버링(기존 번호 체계 참고)
+   - 하위 폴더(Biz/Mission/철학)
+   - PKM 태그(PKM/Biz, PKM/Mission, PKM/Learning 중 1개)
+   - 연결할 기존 영구노트 (최소 2개)
+   - 브릿지 키워드 (B-1 테이블에서 3~5개, 6개 이상 금지)
+   를 제안하세요.
+3. 승격이 아니라면 현재 위치가 적절한지, 다른 곳으로 이동해야 하는지 판단하세요.
+
+## 응답 형식 (JSON만 출력, 마크다운 코드블록 없이)
 {
-  "fileName": "${note.fileName}",
-  "currentPath": "${note.filePath}",
-  "suggestedFolder": "PARA 분류 결과 (0. Slip-Box | 1. Projects | 2. AoR | 3. Resources | 4. Archives)",
-  "reason": "분류 근거 1~2문장",
-  "bridgeKeywords": ["연결 가능한 브릿지 키워드 최대 5개"],
-  "issues": ["발견된 문제점 (프론트매터 누락, 링크 깨짐 등)"],
-  "confidence": 0.0
+  "type": "permanent | fleeting | project | reference | area",
+  "reason": "분류 이유 한 줄",
+  "action": "slip_box_promote | keep | move | merge",
+  "current_location_ok": true,
+  "suggested_move_to": "이동 제안 경로 (move일 때만)",
+  "slip_box": {
+    "suggested_name": "B1I — 핵심 아이디어 한 문장.md",
+    "subfolder": "Biz/B1_콘텐츠 전략",
+    "luhmann": "B1I",
+    "pkm_tag": "PKM/Biz",
+    "connections": ["기존 노트명1", "기존 노트명2"],
+    "bridge_keywords": ["[[키워드1]]", "[[키워드2]]", "[[키워드3]]"],
+    "rewritten_content": "성원의 언어로 다시 쓴 영구노트 내용 (원자성 유지, 200자 이내)"
+  },
+  "summary": "핵심 내용 2줄 요약"
 }
-`.trim();
 
-/**
- * Classifies a single note by calling `claude -p` via stdin.
- * Returns the parsed JSON result or null on failure.
- */
-export const classifyNote = (note, options = {}) => {
-  const {
-    groundTruthPath = DEFAULT_GROUND_TRUTH_PATH,
-  } = options;
+slip_box 필드는 type이 "permanent"이고 action이 "slip_box_promote"일 때만 포함하세요.
+`;
 
-  const groundTruth = loadGroundTruth(groundTruthPath);
-  if (!groundTruth) {
-    return { fileName: note.fileName, error: "Ground Truth 로드 실패" };
-  }
-
-  let content;
-  try {
-    content = fs.readFileSync(note.filePath, "utf-8");
-  } catch (err) {
-    return { fileName: note.fileName, error: `파일 읽기 실패: ${err.message}` };
-  }
-
-  const noteWithContent = { ...note, content };
-  const prompt = buildPrompt(noteWithContent, groundTruth);
-
-  const result = spawnSync("claude", ["-p"], {
+  const { spawnSync } = await import('child_process');
+  const result = spawnSync('claude', ['-p', '--output-format', 'text'], {
     input: prompt,
-    encoding: "utf-8",
-    timeout: TIMEOUT_MS,
-    maxBuffer: 10 * 1024 * 1024,
+    maxBuffer: MAX_BUFFER_BYTES,
+    timeout: CLASSIFY_TIMEOUT_MS,
+    env: { ...process.env, PATH: process.env.PATH },
+    encoding: 'utf-8'
   });
 
-  if (result.error) {
-    const msg = result.error.code === "ETIMEDOUT"
-      ? "분류 타임아웃 (120초 초과)"
-      : `프로세스 오류: ${result.error.message}`;
-    return { fileName: note.fileName, error: msg };
-  }
+  if (result.error) throw result.error;
+  const stdout = result.stdout;
 
-  if (result.status !== 0) {
-    return {
-      fileName: note.fileName,
-      error: `claude CLI 종료 코드 ${result.status}: ${(result.stderr || "").slice(0, 200)}`,
-    };
-  }
-
-  const rawOutput = (result.stdout || "").trim();
-  if (!rawOutput) {
-    return { fileName: note.fileName, error: "claude CLI 빈 응답" };
-  }
+  const text = stdout.trim();
 
   try {
-    const cleaned = stripCodeBlocks(rawOutput);
-    return JSON.parse(cleaned);
-  } catch (err) {
-    return {
-      fileName: note.fileName,
-      error: `JSON 파싱 실패: ${err.message}`,
-      rawOutput: rawOutput.slice(0, 500),
-    };
+    // JSON 블록이 ```json ... ``` 형태로 올 수도 있으므로 처리
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return JSON.parse(text);
+  } catch {
+    return { error: 'JSON 파싱 실패', raw: text };
   }
-};
-
-/**
- * Classifies an array of notes sequentially.
- * Returns an array of classification results.
- */
-export const classifyNotes = (notes, options = {}) => {
-  const results = [];
-  for (const note of notes) {
-    console.log(`[classifier] Classifying: ${note.fileName}`);
-    const result = classifyNote(note, options);
-    results.push(result);
-  }
-  return results;
-};
+}

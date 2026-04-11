@@ -1,105 +1,84 @@
-import fs from "node:fs";
-import path from "node:path";
+// detector.js — 오늘 수정된 .md 파일 감지
+import fs from 'fs';
+import path from 'path';
 
 const IGNORE_DIRS = new Set([
-  ".obsidian",
-  ".smart-env",
-  ".trash",
-  ".git",
-  ".claude",
-  "scripts",
-  "Attachments",
-  "4. Archives",
+  '.obsidian', '.smart-env', '.trash', '.git', '.claude',
+  'scripts', 'Attachments', '4. Archives',
+  '콘텐츠_소스', '(archive)'
 ]);
 
 const IGNORE_FILES = new Set([
-  "CLAUDE.md",
-  "Claude_Project_Instruction.md",
+  'CLAUDE.md', 'Claude_Project_Instruction.md',
+  'Obsidian_Knowledge_Base.txt'
 ]);
 
 /**
- * Returns the start-of-today timestamp (local time, midnight).
+ * 볼트 전체를 재귀 탐색하여 오늘 수정된 .md 파일만 반환
  */
-const getTodayStart = () => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-};
+export function getTodayModifiedNotes(vaultDir) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-/**
- * Recursively walks a directory, collecting .md file paths
- * while respecting IGNORE_DIRS and IGNORE_FILES.
- */
-const walkDir = (dir, collected = []) => {
+  const results = [];
+  walkDir(vaultDir, vaultDir, today, results);
+  return results;
+}
+
+function walkDir(baseDir, currentDir, since, results) {
   let entries;
   try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch (err) {
-    console.error(`[detector] Cannot read directory: ${dir} — ${err.message}`);
-    return collected;
-  }
+    entries = fs.readdirSync(currentDir, { withFileTypes: true });
+  } catch { return; }
 
   for (const entry of entries) {
-    const entryName = entry.name;
+    if (entry.name.startsWith('.')) continue;
+
+    const fullPath = path.join(currentDir, entry.name);
+    const relativePath = path.relative(baseDir, fullPath);
 
     if (entry.isDirectory()) {
-      if (IGNORE_DIRS.has(entryName)) continue;
-      walkDir(path.join(dir, entryName), collected);
-      continue;
-    }
+      const topDir = relativePath.split(path.sep)[0];
+      if (IGNORE_DIRS.has(topDir)) continue;
+      walkDir(baseDir, fullPath, since, results);
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      if (IGNORE_FILES.has(entry.name)) continue;
 
-    if (!entryName.endsWith(".md")) continue;
-    if (IGNORE_FILES.has(entryName)) continue;
-
-    collected.push(path.join(dir, entryName));
-  }
-
-  return collected;
-};
-
-/**
- * Scans the vault for .md files modified today.
- * Returns an array of { filePath, fileName, mtime } objects.
- */
-export const getTodayModifiedNotes = (vaultDir) => {
-  const todayStart = getTodayStart();
-  const allMdFiles = walkDir(vaultDir);
-
-  const modified = [];
-  for (const filePath of allMdFiles) {
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.mtimeMs >= todayStart) {
-        modified.push({
-          filePath,
-          fileName: path.basename(filePath, ".md"),
-          mtime: stat.mtime.toISOString(),
-        });
-      }
-    } catch (err) {
-      console.error(`[detector] Cannot stat file: ${filePath} — ${err.message}`);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.mtime >= since) {
+          results.push({
+            file: entry.name,
+            filePath: fullPath,
+            relativePath,
+            mtime: stat.mtime,
+            content: fs.readFileSync(fullPath, 'utf-8')
+          });
+        }
+      } catch { continue; }
     }
   }
-
-  console.log(`[detector] Found ${modified.length} note(s) modified today.`);
-  return modified;
-};
+}
 
 /**
- * Returns a Set of existing Slip-Box note file names (without extension)
- * for link-validation purposes.
+ * 기존 Slip-Box 노트 목록을 수집 (연결 참고용)
  */
-export const getExistingSlipBoxNotes = (vaultDir) => {
-  const slipBoxDir = path.join(vaultDir, "0. Slip-Box");
-  if (!fs.existsSync(slipBoxDir)) {
-    console.warn(`[detector] Slip-Box directory not found: ${slipBoxDir}`);
-    return new Set();
+export function getExistingSlipBoxNotes(vaultDir) {
+  const slipBoxDir = path.join(vaultDir, '0. Slip-Box');
+  const notes = [];
+  walkSlipBox(slipBoxDir, notes);
+  return notes;
+}
+
+function walkSlipBox(dir, notes) {
+  if (!fs.existsSync(dir)) return;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkSlipBox(fullPath, notes);
+    } else if (entry.name.endsWith('.md')) {
+      notes.push(entry.name.replace('.md', ''));
+    }
   }
-
-  const files = walkDir(slipBoxDir);
-  const noteNames = new Set(
-    files.map((f) => path.basename(f, ".md"))
-  );
-
-  console.log(`[detector] ${noteNames.size} existing Slip-Box note(s) indexed.`);
-  return noteNames;
-};
+}
