@@ -26,7 +26,7 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "your-username/your-vault-repo")  # owner/repo
 GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
-BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514")
+BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1")
 AWS_BEDROCK_REGION = os.environ.get("AWS_BEDROCK_REGION", "us-east-1")
 LAMBDA_TIMEOUT = 90  # Opus는 깊게 사고하므로 90초
 ALLOWED_CHAT_ID = int(os.environ.get("ALLOWED_CHAT_ID", "YOUR_CHAT_ID"))  # 성원만 사용 가능
@@ -158,8 +158,17 @@ def commit_to_github(file_path: str, content: str, commit_message: str) -> dict:
 
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="PUT")
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 307, 308):
+            # GitHub 레포 이동 시 리다이렉트 — 새 URL로 재시도
+            redirect_url = e.headers.get("Location", url)
+            req = urllib.request.Request(redirect_url, data=data, headers=headers, method="PUT")
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read())
+        raise
 
 
 def send_telegram_message(chat_id: int, text: str, reply_markup: dict = None):
