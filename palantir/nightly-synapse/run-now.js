@@ -1,17 +1,20 @@
-import { runSynapse } from "./synapse.js";
+// run-now.js — 즉시 실행용 (테스트 & 수동 실행)
+import { runNightlySynapse } from './synapse.js';
 
-console.log("[run-now] 수동 실행 시작...");
-
-const result = await runSynapse();
-
-if (result.success) {
-  console.log("[run-now] 완료.");
-  if (result.reportPath) {
-    console.log(`[run-now] 리포트: ${result.reportPath}`);
-  } else {
-    console.log("[run-now] 오늘 수정된 노트 없음.");
-  }
-} else {
-  console.error(`[run-now] 실패: ${result.error}`);
+// 무한루프 방지: 15분 후 강제 종료
+const HARD_KILL_MS = 15 * 60 * 1000;
+const killTimer = setTimeout(() => {
+  console.error('⚠️ 15분 경과 — 강제 종료 (무한루프 방지)');
   process.exit(1);
-}
+}, HARD_KILL_MS);
+
+runNightlySynapse()
+  .then(() => {
+    clearTimeout(killTimer);
+    console.log('\n완료.');
+  })
+  .catch(err => {
+    clearTimeout(killTimer);
+    console.error('실행 실패:', err);
+    process.exit(1);
+  });

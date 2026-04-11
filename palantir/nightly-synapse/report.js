@@ -1,103 +1,78 @@
-import fs from "node:fs";
-import path from "node:path";
+// report.js — 리뷰 결과를 마크다운 리포트로 생성
+import fs from 'fs';
+import path from 'path';
 
 /**
- * Formats a date as YYYY-MM-DD.
+ * 분류 결과를 마크다운 리포트로 생성하고 Inbox에 저장
  */
-const formatDate = (date = new Date()) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
+export function generateAndSaveReport(results, vaultDir) {
+  const date = new Date().toISOString().split('T')[0];
+  const content = generateReport(results, date);
 
-/**
- * Builds a single note section for the report.
- */
-const buildNoteSection = (result, index) => {
-  if (result.error) {
-    return [
-      `### ${index + 1}. ${result.fileName || "Unknown"}`,
-      `- **오류**: ${result.error}`,
-      result.rawOutput ? `- **원본 응답** (일부): \`${result.rawOutput.slice(0, 200)}\`` : "",
-    ].filter(Boolean).join("\n");
-  }
-
-  const issues = (result.issues && result.issues.length > 0)
-    ? result.issues.map((issue) => `  - ${issue}`).join("\n")
-    : "  - 없음";
-
-  const keywords = (result.bridgeKeywords && result.bridgeKeywords.length > 0)
-    ? result.bridgeKeywords.map((kw) => `[[${kw}]]`).join(" ")
-    : "없음";
-
-  return [
-    `### ${index + 1}. ${result.fileName}`,
-    `- **현재 경로**: \`${result.currentPath}\``,
-    `- **추천 폴더**: ${result.suggestedFolder}`,
-    `- **분류 근거**: ${result.reason}`,
-    `- **신뢰도**: ${result.confidence}`,
-    `- **브릿지 키워드**: ${keywords}`,
-    `- **이슈**:`,
-    issues,
-  ].join("\n");
-};
-
-/**
- * Generates the full markdown report content.
- */
-const buildReportContent = (results, dateStr) => {
-  const successResults = results.filter((r) => !r.error);
-  const errorResults = results.filter((r) => r.error);
-
-  const header = [
-    `# Nightly Synapse Report — ${dateStr}`,
-    "",
-    `> 자동 생성됨. 총 ${results.length}개 노트 분석 | 성공 ${successResults.length} | 실패 ${errorResults.length}`,
-    "",
-    "---",
-    "",
-  ].join("\n");
-
-  const sections = results.map((r, i) => buildNoteSection(r, i)).join("\n\n");
-
-  const summary = [
-    "",
-    "---",
-    "",
-    "## 요약",
-    "",
-    `| 항목 | 수 |`,
-    `|------|---:|`,
-    `| 분석 대상 | ${results.length} |`,
-    `| 분류 성공 | ${successResults.length} |`,
-    `| 오류 발생 | ${errorResults.length} |`,
-    "",
-  ].join("\n");
-
-  return header + sections + summary;
-};
-
-/**
- * Writes the nightly synapse report to the Inbox folder.
- * Creates the Inbox directory if it does not exist.
- * Returns the full path of the generated report file.
- */
-export const generateReport = (vaultDir, results) => {
-  const dateStr = formatDate();
-  const inboxDir = path.join(vaultDir, "Inbox");
-
-  if (!fs.existsSync(inboxDir)) {
-    fs.mkdirSync(inboxDir, { recursive: true });
-    console.log(`[report] Created Inbox directory: ${inboxDir}`);
-  }
-
-  const reportFileName = `Nightly-Synapse_${dateStr}.md`;
-  const reportPath = path.join(inboxDir, reportFileName);
-  const content = buildReportContent(results, dateStr);
-
-  fs.writeFileSync(reportPath, content, "utf-8");
-  console.log(`[report] Report written: ${reportPath}`);
+  const reportPath = path.join(vaultDir, 'Inbox', `Nightly-Synapse_${date}.md`);
+  fs.writeFileSync(reportPath, content, 'utf-8');
 
   return reportPath;
-};
+}
+
+function generateReport(results, date) {
+  const promotes = results.filter(r => r.classification?.action === 'slip_box_promote');
+  const keeps = results.filter(r => r.classification?.action === 'keep');
+  const moves = results.filter(r => r.classification?.action === 'move');
+  const errors = results.filter(r => r.classification?.error);
+
+  return `---
+tags: [system/nightly-synapse]
+created: ${date}
+---
+
+# Nightly Synapse Review — ${date}
+
+> 오늘 수정된 노트 ${results.length}개를 Ground Truth 기준으로 점검했습니다.
+> **이 리포트는 제안일 뿐입니다. 실행 전에 반드시 검토하세요.**
+
+---
+
+## Slip-Box 승격 후보 (${promotes.length}개)
+
+${promotes.length === 0 ? '_없음_\n' : promotes.map(r => {
+  const s = r.classification.slip_box;
+  return `### ${r.note}
+- **제안 파일명**: \`${s.suggested_name}\`
+- **위치**: \`0. Slip-Box/${s.subfolder}/\`
+- **루만 넘버링**: ${s.luhmann}
+- **PKM 태그**: #${s.pkm_tag}
+- **연결 노트**: ${s.connections.map(c => `[[${c}]]`).join(', ')}
+- **브릿지 키워드**: ${s.bridge_keywords.join(' ')}
+- **이유**: ${r.classification.reason}
+- **핵심 요약**: ${r.classification.summary}
+
+> **제안 본문**:
+> ${s.rewritten_content}
+`;
+}).join('\n')}
+
+---
+
+## 현재 위치 유지 (${keeps.length}개)
+
+${keeps.length === 0 ? '_없음_\n' : keeps.map(r => `- **${r.note}** — ${r.classification.summary}`).join('\n')}
+
+---
+
+## 이동 제안 (${moves.length}개)
+
+${moves.length === 0 ? '_없음_\n' : moves.map(r => `- **${r.note}** → \`${r.classification.suggested_move_to}\` — ${r.classification.reason}`).join('\n')}
+
+${errors.length > 0 ? `
+---
+
+## 처리 오류 (${errors.length}개)
+
+${errors.map(r => `- **${r.note}**: ${r.classification.error}`).join('\n')}
+` : ''}
+---
+
+_Generated by Nightly Synapse at ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}_
+`;
+}

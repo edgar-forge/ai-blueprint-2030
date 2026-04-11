@@ -1,86 +1,105 @@
 """
-Obsidian MCP 서버
-- search_notes: 4-가중치 시맨틱 검색
-- get_note: 노트 원문 반환 (볼트 경계 보안 체크 포함)
+옵시디언 노트 검색 MCP 서버
+- Claude Code에서 도구(tool)로 사용 가능
+- 질문을 받으면 관련 노트를 찾아서 반환
 """
 
 import os
-from pathlib import Path
+
 from mcp.server.fastmcp import FastMCP
-from search import search
+from search import search, detect_query_bridge_keywords
 
-VAULT_PATH = "{VAULT_PATH}"
+VAULT_PATH = os.environ.get("VAULT_PATH", "/path/to/your/obsidian-vault")
 
-mcp = FastMCP(
-    "obsidian-vault",
-    instructions=(
-        "옵시디언 볼트를 검색하고 노트를 읽는 MCP 서버입니다. "
-        "search_notes로 시맨틱 검색, get_note로 노트 원문을 가져옵니다."
-    ),
-)
-
-
-def _is_safe_path(note_path: str) -> bool:
-    vault = Path(VAULT_PATH).resolve()
-    target = (vault / note_path).resolve()
-    return str(target).startswith(str(vault))
+# MCP 서버 생성
+mcp = FastMCP("obsidian-search")
 
 
 @mcp.tool()
-def search_notes(query: str, top_k: int = 5) -> list[dict]:
+def search_notes(query: str, top_k: int = 5) -> str:
     """
-    옵시디언 볼트에서 시맨틱 검색을 수행합니다.
+    옵시디언 볼트에서 질문과 관련된 노트를 검색합니다.
+
+    점수 계산: (벡터유사도 + 제목보너스 + 브릿지키워드보너스) × 폴더가중치
+    - Slip-Box/P1E 노트 → 3배 가중치
+    - Project 노트 → 2배 가중치
+    - 브릿지 키워드가 겹치면 추가 보너스
 
     Args:
-        query: 검색어 (자연어)
-        top_k: 반환할 최대 결과 수 (기본 5)
-
-    Returns:
-        검색 결과 리스트 (filename, path, text, score, bridge_keywords, weight)
+        query: 검색할 질문 (예: "내 업의 본질", "습관을 만드는 방법")
+        top_k: 반환할 노트 수 (기본 5개, 최대 20개)
     """
-    if not query or not query.strip():
-        return [{"error": "검색어를 입력해주세요."}]
+    query = query.strip()
+    if not query:
+        return "검색어를 입력해주세요."
 
-    clamped_top_k = max(1, min(top_k, 20))
-    results = search(query, top_k=clamped_top_k)
-    return results
+    top_k = min(max(top_k, 1), 20)
+    results = search(query, top_k=top_k)
+
+    if not results:
+        return "관련 노트를 찾지 못했습니다."
+
+    # 쿼리에서 감지된 브릿지 키워드
+    query_kws = detect_query_bridge_keywords(query)
+
+    lines = []
+    lines.append(f"🔍 \"{query}\" 검색 결과 ({len(results)}개)")
+    if query_kws:
+        lines.append(f"감지된 브릿지 키워드: {', '.join(query_kws)}")
+    lines.append("")
+
+    for i, r in enumerate(results, 1):
+        d = r["_detail"]
+        tags = []
+        if d["folder_weight"] == 3.0:
+            tags.append("⭐Slip-Box")
+        elif d["folder_weight"] == 2.0:
+            tags.append("📁Project")
+        if d["title_bonus"] > 0:
+            tags.append("📌제목매칭")
+        if d["bridge_overlap"] > 0:
+            tags.append(f"🔗브릿지×{d['bridge_overlap']}")
+        tag_str = " ".join(tags)
+
+        lines.append(f"## {i}. [{r['score']:.4f}] {r['filename']}")
+        lines.append(f"경로: {r['path']}")
+        if tag_str:
+            lines.append(tag_str)
+        lines.append("")
+        # 본문 미리보기 (앞 500자)
+        preview = r["text"][:500].replace("\n", " ").strip()
+        lines.append(f"> {preview}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 @mcp.tool()
-def get_note(path: str) -> dict:
+def get_note(path: str) -> str:
     """
-    노트의 전체 원문을 반환합니다.
+    옵시디언 노트의 전체 내용을 읽어옵니다.
+    search_notes로 찾은 노트의 경로(path)를 넣으면 전문을 반환합니다.
 
     Args:
-        path: 볼트 루트 기준 상대 경로 (예: "0. Slip-Box/시스템_사고.md")
-
-    Returns:
-        노트 내용 또는 에러 메시지
+        path: 노트 경로 (예: "0. Slip-Box/철학/P1_본질/P1A — 본질에 대한 생각.md")
     """
-    if not path or not path.strip():
-        return {"error": "경로를 입력해주세요."}
+    path = path.strip()
+    if not path:
+        return "파일 경로를 입력해주세요."
 
-    if not _is_safe_path(path):
-        return {"error": "접근이 허용되지 않는 경로입니다."}
+    full_path = os.path.realpath(os.path.join(VAULT_PATH, path))
 
-    full_path = Path(VAULT_PATH) / path
-    if not full_path.exists():
-        return {"error": f"노트를 찾을 수 없습니다: {path}"}
+    if not full_path.startswith(os.path.realpath(VAULT_PATH)):
+        return "볼트 외부 파일에는 접근할 수 없습니다."
 
-    if not full_path.is_file():
-        return {"error": f"파일이 아닙니다: {path}"}
+    if not os.path.exists(full_path):
+        return f"파일을 찾을 수 없습니다: {path}"
 
-    try:
-        content = full_path.read_text(encoding="utf-8")
-    except Exception as e:
-        return {"error": f"노트 읽기 실패: {str(e)}"}
+    with open(full_path, "r", encoding="utf-8") as f:
+        content = f.read()
 
-    return {
-        "path": path,
-        "filename": full_path.stem,
-        "content": content,
-    }
+    return f"📄 {path}\n\n{content}"
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run()
