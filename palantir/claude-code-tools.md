@@ -56,23 +56,35 @@
 ```
 ~/obsidian-mcp-server/
 ├── indexer.py           # 노트 → 벡터 변환 → LanceDB 저장 (증분 기본)
-├── search.py            # 4중 가중치 검색
+├── search.py            # 검색 (벡터유사도 + 제목보너스 + 브릿지보너스, 덧셈)
 ├── bridge_keywords.py   # 35개 브릿지 키워드 사전
 ├── server.py            # FastMCP 서버
-├── vault.lancedb/       # 벡터 DB 저장소 (~31MB)
+├── benchmark.py         # 6개 정답 세트 품질 벤치마크 (P@1, P@5, MRR)
+├── vault.lancedb/       # 벡터 DB 저장소
 └── venv/                # Python 가상환경
 ```
 
-### 주요 특징
+### 주요 특징 (2026-04-21 KURE-v1 업그레이드)
 
 | 항목 | 값 |
 |------|-----|
-| 임베딩 모델 | sentence-transformers (paraphrase-multilingual-MiniLM-L12-v2, 384차원) |
+| 임베딩 모델 | **nlpai-lab/KURE-v1** (BGE-m3 한국어 파인튜닝, 1024차원, MTEB-ko NDCG@5 0.6748 1위) |
+| 이전 모델 | paraphrase-multilingual-MiniLM-L12-v2 (384차원) — 한국어 전문 용어 약함 |
+| 품질 개선 | 도메인 특수어 similarity 0.1 → 0.55 (5배) |
 | 벡터 DB | LanceDB (파일 기반, 로컬) |
-| 검색 | 4중 가중치 (벡터유사도 + 제목보너스 + 브릿지보너스 × 폴더가중치) |
-| 증분 속도 | 2,457 노트 기준 9.4초 |
+| 검색 공식 | similarity + title_bonus(0.5) + bridge_bonus(최대 0.45) — 덧셈 |
+| 폴더 가중치 | 제거 (이전 Slip-Box × 3배 곱셈이 relevance 훼손) |
+| 검색 품질 | P@1 5/6 (83%), P@5 6/6 (100%), MRR 0.917 |
+| 응답 속도 | Cold 8.8초, Warm 200-500ms |
+| 전체 재인덱싱 | 7분 30초 (2,458 노트) |
 | 비용 | 무료 (로컬 모델, 네트워크 불필요) |
-| 한국어 | 특화 multilingual 모델 |
+
+### 실행 설정 (M1 CPU 최적화)
+
+- `torch.set_num_threads(1)` + `torch.set_num_interop_threads(1)` — 시스템 렉 방지
+- `device="cpu"` (MPS 미사용) — GPU 발열 제거
+- `max_seq_length = 512` (KURE-v1 최대 8192지만 안전값)
+- `EMBEDDING_BATCH_SIZE = 8`, `MAX_NOTE_CHARS = 3000`
 
 ### 운영 명령어
 
