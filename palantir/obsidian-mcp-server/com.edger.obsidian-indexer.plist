@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.edger.obsidian-indexer</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/edger-choi/obsidian-mcp-server/auto_index.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/edger-choi/obsidian-mcp-server/indexer_auto.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/edger-choi/obsidian-mcp-server/indexer_auto.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/edger-choi/obsidian-mcp-server</string>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

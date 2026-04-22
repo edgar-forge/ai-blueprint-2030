@@ -6,6 +6,41 @@
 
 ---
 
+## [2026-04-22] — 볼트 자동 인덱싱 (launchd)
+
+### Added (신규)
+
+- `palantir/obsidian-mcp-server/com.edger.obsidian-indexer.plist` — macOS launchd 에이전트 (30분 주기 자동 증분 인덱싱)
+- `palantir/obsidian-mcp-server/auto_index.sh` — 자동 실행 스크립트 (중복 방지 + 로그 로테이션)
+
+### 왜 구축했나
+
+기존엔 `.md` 새로 만들거나 수정해도 수동으로 `indexer.py` 돌려야 검색에 반영됐음. GBrain(제거됨)의 파일 워처 기능 대체 필요. launchd 기반 30분 스케줄로 해결.
+
+### 특징
+
+- `LowPriorityIO=true` + `ProcessType=Background`로 작업 중에도 시스템 영향 최소
+- `pgrep`으로 중복 실행 방지 (수동 `indexer.py`와 충돌 방지)
+- 변경 없으면 0.1초에 종료 (저부하)
+- 로그 10MB 초과 시 자동 축약
+- `RunAtLoad=false`로 로그인 직후 실행 안 함 (부팅 부하 방지)
+
+### 설치 방법
+
+```bash
+# plist 배치
+cp com.edger.obsidian-indexer.plist ~/Library/LaunchAgents/
+chmod +x auto_index.sh
+
+# 활성화
+launchctl load ~/Library/LaunchAgents/com.edger.obsidian-indexer.plist
+
+# 확인
+launchctl list | grep obsidian-indexer
+```
+
+---
+
 ## [2026-04-22] — Palantir Scenario B Phase 1 (마크다운 헤더 청킹)
 
 ### Changed (변경)
