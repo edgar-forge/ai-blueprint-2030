@@ -187,6 +187,35 @@ def compute_changes(current: dict[str, float], previous: dict[str, float]):
     return added, modified, deleted
 
 
+def validate_scan_sanity(current_files: dict, previous_state: dict) -> None:
+    """볼트 스캔 결과의 sanity check. 2026-04-22 장애로 추가된 방어 코드.
+
+    시나리오: launchd 환경에서 rglob가 빈 iterator를 반환한 적 있음 (원인 불명).
+    이때 인덱서가 '모든 파일이 삭제됐다'로 해석해 전체 DB를 비워버렸음.
+
+    방어책:
+    - 이전 state가 10개 이상인데 현재 스캔이 0개면 → 거의 100% 스캔 이상
+    - 이전 state가 100개 이상인데 현재 스캔이 90% 이상 감소면 → 의심
+    - 실제로 대량 삭제가 필요하면 `--full` 플래그로 명시적으로 실행
+    """
+    prev_count = len(previous_state)
+    curr_count = len(current_files)
+
+    if prev_count >= 10 and curr_count == 0:
+        raise RuntimeError(
+            f"⚠️ 스캔 결과 0개 파일 (이전 {prev_count}개 기록). "
+            f"파일시스템 접근 이상 의심. 데이터 보호를 위해 인덱싱 중단. "
+            f"실제 전체 삭제가 맞으면 indexer.py --full 로 재실행."
+        )
+
+    if prev_count >= 100 and curr_count < prev_count * 0.1:
+        raise RuntimeError(
+            f"⚠️ 스캔 파일 {prev_count} → {curr_count}로 90% 이상 감소. "
+            f"비정상 감소로 판단. 데이터 보호를 위해 인덱싱 중단. "
+            f"실제 대량 삭제가 맞으면 indexer.py --full 로 재실행."
+        )
+
+
 def process_note(vault_path: str, rel_path: str) -> list[dict]:
     """노트 하나를 읽어서 인덱싱용 청크 dict 리스트로 변환한다."""
     full_path = Path(vault_path) / rel_path
@@ -379,6 +408,8 @@ if __name__ == "__main__":
     if determine_index_mode(is_force_full, previous_state):
         full_reindex(VAULT_PATH, current_files)
     else:
+        # 증분 인덱싱 전 sanity check (2026-04-22 장애 재발 방지)
+        validate_scan_sanity(current_files, previous_state)
         added, modified, deleted = compute_changes(current_files, previous_state)
         incremental_index(VAULT_PATH, current_files, added, modified, deleted)
 
