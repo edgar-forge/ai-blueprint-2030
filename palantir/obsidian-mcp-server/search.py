@@ -1,9 +1,11 @@
 """
-옵시디언 노트 검색기
-- LanceDB 벡터 검색 (본문 의미 기반)
+옵시디언 노트 검색기 (Scenario B Phase 1 — 청킹 적용, 벡터 단독)
+- LanceDB 벡터 검색 (본문 의미 기반) — 청크 단위
+- source_path 기준 dedup (파일당 최고 점수 청크 1개)
 - 파일명/제목 키워드 매칭 보너스
 - 브릿지 키워드 겹침 보너스
-- PARA 폴더 가중치 (Slip-Box/P1E → 3배, Project → 2배)
+
+최종 점수 = similarity + title_bonus + bridge_bonus
 """
 
 import logging
@@ -16,19 +18,25 @@ from bridge_keywords import BRIDGE_KEYWORDS
 logger = logging.getLogger(__name__)
 
 # ─── 설정 ───
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "vault.lancedb"))
+DB_PATH = os.path.expanduser("~/obsidian-mcp-server/vault.lancedb")
 TABLE_NAME = "notes"
-EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+EMBEDDING_MODEL = "nlpai-lab/KURE-v1"  # 1024D, 8192 토큰, MTEB-ko NDCG@5 0.6748 (1위)
 
 # ─── 점수 가중치 ───
-TITLE_MATCH_BONUS = 0.3
+TITLE_MATCH_BONUS = 0.5
 BRIDGE_KEYWORD_BONUS = 0.15
 BRIDGE_KEYWORD_MAX_BONUS = 0.45
-MIN_QUERY_WORD_LEN = 2  # 제목 매칭 시 최소 단어 길이
-FETCH_MULTIPLIER = 10  # top_k의 몇 배를 DB에서 가져올지
-MIN_FETCH_COUNT = 100  # 최소 fetch 수
+MIN_QUERY_WORD_LEN = 2
 
-# ─── 모델 & DB 싱글턴 (콜드스타트 최적화) ───
+# ─── Fetch 설정 (청크 기반, 더 넓게 확보 후 dedup) ───
+FETCH_MULTIPLIER = 30  # top_k의 몇 배를 DB에서 가져올지 (청킹으로 후보 증가 → 30배)
+MIN_FETCH_COUNT = 500
+
+# 폴더 가중치 제거 유지 (2026-04-21)
+FOLDER_BONUS_SLIPBOX = 0.0
+FOLDER_BONUS_PROJECT = 0.0
+
+# ─── 모델 & DB 싱글턴 ───
 _model = None
 _table = None
 
@@ -36,7 +44,11 @@ _table = None
 def _get_model():
     global _model
     if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        import torch
+        torch.set_num_threads(1)
+        torch.set_num_interop_threads(1)
+        _model = SentenceTransformer(EMBEDDING_MODEL, device="cpu")
+        _model.max_seq_length = 512
     return _model
 
 
@@ -62,7 +74,7 @@ def detect_query_bridge_keywords(query: str) -> set:
 
 def calculate_score(row: dict, query_words: list[str],
                     query_bridge_kws: set) -> dict:
-    """단일 검색 결과의 최종 점수를 계산한다."""
+    """단일 청크의 최종 점수를 계산한다."""
     distance = row.get("_distance", 1.0)
     similarity = 1.0 / (1.0 + distance)
 
@@ -78,11 +90,20 @@ def calculate_score(row: dict, query_words: list[str],
     bridge_bonus = min(overlap_count * BRIDGE_KEYWORD_BONUS, BRIDGE_KEYWORD_MAX_BONUS)
 
     folder_weight = row.get("weight", 1.0)
-    final_score = (similarity + title_bonus + bridge_bonus) * folder_weight
+    if folder_weight >= 3.0:
+        folder_bonus = FOLDER_BONUS_SLIPBOX
+    elif folder_weight >= 2.0:
+        folder_bonus = FOLDER_BONUS_PROJECT
+    else:
+        folder_bonus = 0.0
+
+    final_score = similarity + title_bonus + bridge_bonus + folder_bonus
 
     return {
         "filename": row["filename"],
         "path": row["path"],
+        "chunk_id": row.get("chunk_id", row["path"]),
+        "chunk_index": row.get("chunk_index", 0),
         "text": row["text"],
         "score": round(final_score, 4),
         "_detail": {
@@ -91,15 +112,36 @@ def calculate_score(row: dict, query_words: list[str],
             "bridge_bonus": bridge_bonus,
             "bridge_overlap": overlap_count,
             "folder_weight": folder_weight,
+            "folder_bonus": folder_bonus,
         },
     }
+
+
+def dedup_by_source(scored_chunks: list[dict], top_k: int) -> list[dict]:
+    """source_path 기준으로 중복 제거. 파일당 최고 점수 청크 1개만 유지."""
+    seen_paths = set()
+    deduped = []
+    for chunk in scored_chunks:
+        if chunk["path"] in seen_paths:
+            continue
+        seen_paths.add(chunk["path"])
+        deduped.append(chunk)
+        if len(deduped) >= top_k:
+            break
+    return deduped
 
 
 def search(query: str, top_k: int = 5) -> list[dict]:
     """
     질문을 받아서 관련 노트를 찾아 반환한다.
 
-    최종 점수 = (벡터유사도 + 제목보너스 + 브릿지보너스) × 폴더가중치
+    파이프라인:
+    1. KURE-v1로 쿼리 임베딩
+    2. LanceDB 벡터 검색 (top_k × 30 후보)
+    3. 각 청크 점수 계산 (similarity + title_bonus + bridge_bonus)
+    4. 점수 내림차순 정렬
+    5. source_path로 dedup (파일당 최고 청크 1개)
+    6. top_k 반환
     """
     try:
         model = _get_model()
@@ -125,46 +167,27 @@ def search(query: str, top_k: int = 5) -> list[dict]:
         for row in raw_results
     ]
     scored.sort(key=lambda x: x["score"], reverse=True)
-    return scored[:top_k]
+
+    return dedup_by_source(scored, top_k)
 
 
 if __name__ == "__main__":
     test_queries = [
         "내 업의 본질",
-        "자본주의와 비교우위",
-        "습관을 만드는 방법",
+        "씬 전환 장소 단위 기억",
+        "외모가 뛰어난 여자에게 외모 칭찬하지 않기",
     ]
 
     print("=" * 60)
-    print("옵시디언 노트 검색 테스트")
-    print(f"점수 = (유사도 + 제목보너스 + 브릿지보너스) × 폴더가중치")
+    print("옵시디언 노트 검색 테스트 (Scenario B Phase 1)")
     print("=" * 60)
 
     for q in test_queries:
         print(f"\n🔍 질문: \"{q}\"")
-        q_kws = detect_query_bridge_keywords(q)
-        if q_kws:
-            print(f"   감지된 브릿지 키워드: {', '.join(q_kws)}")
-        print("-" * 50)
-
         results = search(q, top_k=5)
         for i, r in enumerate(results, 1):
             d = r["_detail"]
-            tags = []
-            if d["folder_weight"] == 3.0:
-                tags.append("⭐Slip-Box/P1E")
-            elif d["folder_weight"] == 2.0:
-                tags.append("📁Project")
-            if d["title_bonus"] > 0:
-                tags.append("📌제목매칭")
-            if d["bridge_overlap"] > 0:
-                tags.append(f"🔗브릿지×{d['bridge_overlap']}")
-            tag_str = " ".join(tags)
-
-            print(f"  {i}. [{r['score']:.4f}] {r['filename']}")
-            print(f"     유사도={d['similarity']:.4f} "
-                  f"제목+{d['title_bonus']:.1f} "
-                  f"브릿지+{d['bridge_bonus']:.2f} "
-                  f"×{d['folder_weight']:.0f}배  {tag_str}")
+            print(f"  {i}. [{r['score']:.4f}] {r['filename']} (chunk {r['chunk_index']})")
+            print(f"     유사도={d['similarity']:.4f} 제목+{d['title_bonus']:.1f} 브릿지+{d['bridge_bonus']:.2f}")
             print(f"     경로: {r['path']}")
         print()
