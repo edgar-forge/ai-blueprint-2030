@@ -6,11 +6,43 @@
 
 ---
 
-## [2026-04-22] — 볼트 자동 인덱싱 (launchd)
+## [2026-04-22 수정] — 자동 인덱싱 방식 변경 (launchd → VSCode folderOpen) + 데이터 손실 방어 코드
 
-### Added (신규)
+### ⚠️ Incident
 
-- `palantir/obsidian-mcp-server/com.edger.obsidian-indexer.plist` — macOS launchd 에이전트 (30분 주기 자동 증분 인덱싱)
+launchd 30분 주기 자동 인덱싱 운영 중 **데이터 손실 사고 발생**:
+- 원인 불명의 `scan_vault` 0개 반환 → 인덱서가 "전체 삭제"로 해석 → DB 전부 비워짐
+- LanceDB 버전 복원(`tbl.restore(38)`)으로 데이터 복구 성공
+- 근본 원인은 인덱서 방어 코드 부재 (단일 스캔 신뢰 후 대량 삭제)
+
+### Changed (변경)
+
+- `palantir/obsidian-mcp-server/indexer.py`: **`validate_scan_sanity()` 방어 코드 추가**
+  - 이전 state가 10개 이상인데 현재 스캔 0개 → abort
+  - 90% 이상 감소 → abort
+  - 실제 대량 삭제 필요하면 `--full` 플래그로 명시 실행
+
+### Removed (제거)
+
+- `palantir/obsidian-mcp-server/com.edger.obsidian-indexer.plist` — launchd 30분 주기 자동 인덱싱 **폐기**
+  - 대체: VSCode `.vscode/tasks.json` folderOpen 트리거 (볼트 작업 시작 시점에만 인덱싱)
+  - 장점: 타이밍 충돌 없음, 환경변수 상속 OK, 작업 맥락에 맞춤
+
+### Lesson Learned
+
+- **방어 코드 기본값**: 단일 파일시스템 관찰로 대량 삭제 결정 금지
+- **LanceDB 버전 히스토리는 생명줄**: 사고 복구 가능
+- **성공 직후 수동 백업** 습관화 필요
+
+---
+
+## [2026-04-22] — 볼트 자동 인덱싱 (launchd, 폐기됨)
+
+> ⚠️ 이 접근법은 위 사고로 폐기됨. 기록용으로만 남김.
+
+### Added (신규, 폐기됨)
+
+- ~~`palantir/obsidian-mcp-server/com.edger.obsidian-indexer.plist`~~ — macOS launchd 에이전트 (30분 주기 자동 증분 인덱싱)
 - `palantir/obsidian-mcp-server/auto_index.sh` — 자동 실행 스크립트 (중복 방지 + 로그 로테이션)
 
 ### 왜 구축했나
