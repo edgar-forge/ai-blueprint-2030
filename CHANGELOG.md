@@ -6,6 +6,51 @@
 
 ---
 
+## [2026-04-22] — Palantir Scenario B Phase 1 (마크다운 헤더 청킹)
+
+### Changed (변경)
+
+- `palantir/obsidian-mcp-server/indexer.py`: **1파일 = 1벡터 → 마크다운 헤더 청킹**
+  - `langchain_text_splitters.MarkdownHeaderTextSplitter` (H1/H2/H3) + `RecursiveCharacterTextSplitter` (800/100 overlap)
+  - 청크당 최대 ~1200자. 200자 미만은 이웃과 병합.
+  - **기존 MAX_NOTE_CHARS=3000 제한 제거** — 대형 파일 tail 유실 문제 완전 해결.
+  - 스키마 확장: `chunk_id`, `chunk_index` 추가. `path`는 소스 파일 경로로 유지 (safe_delete 호환).
+  - 인덱싱 환경변수 `OMP_NUM_THREADS=4` 등 강제 (M1 PyTorch의 torch.set_num_threads 미효력 보완).
+  - `EMBEDDING_BATCH_SIZE=8 → 32` (4-thread 환경 throughput 확보).
+
+- `palantir/obsidian-mcp-server/search.py`: **청크 단위 검색 + dedup**
+  - 벡터 검색 후 `source_path` 기준 중복 제거. 파일당 최고 점수 청크 1개만 반환.
+  - `FETCH_MULTIPLIER=20 → 30` (청킹으로 후보 풀 확대).
+  - 출력에 `chunk_id`, `chunk_index` 노출 (어느 섹션이 매칭됐는지 표시).
+
+### Added (신규)
+
+- `palantir/obsidian-mcp-server/RESUME_AT_HOME.md`: Phase 1 재개 가이드 (전체 재인덱싱 ~1h 45m, 4-thread 환경변수 + caffeinate 활용).
+
+### 왜 이 변경이 필요했나
+
+- **기존 문제**: `MAX_NOTE_CHARS=3000`으로 대형 파일의 뒷부분 99%가 유실됨. 예) 픽업 자료 1.2MB의 0.3%만 인덱싱됨. 긴 인용문이나 파일 중반 이후 내용 검색 불가.
+- **해결**: 헤더 기준 청킹으로 파일 전체를 섹션 단위로 쪼개 각각 임베딩. 같은 파일의 여러 섹션이 독립 검색 단위가 됨.
+
+### 결과 (12 쿼리 A/B/C/D 타입 벤치마크)
+
+| 지표 | 기준선 (Scenario A) | Phase 1 | 델타 |
+|------|:---:|:---:|:---:|
+| P@1 | 5/12 (41.7%) | **7/12 (58.3%)** | +2 |
+| P@5 | 6/12 (50%) | **9/12 (75%)** | +3 |
+| MRR | 0.458 | **0.642** | +0.184 |
+
+- **B타입 (긴 인용문)**: P@5 0/3 → **3/3** (핵심 성과)
+- **D타입 (파일 tail)**: 라벨링 오류 발견 — Phase 1이 잘 작동해서 원자화된 개념/기법 노트를 소스 파일보다 더 정확히 매칭
+
+### 주의사항
+
+- 검색 시 CPU는 **1 thread 유지** (발열 방지). 인덱싱만 4-thread.
+- M1 Apple Silicon에서 PyTorch CPU는 환경변수 설정해도 실질 ~1.5~2 thread만 활용됨 (Accelerate BLAS 한계).
+- 전체 재인덱싱은 1회성 비용. 증분 인덱싱은 그대로 30초~2분 유지.
+
+---
+
 ## [2026-04-17] — Ground Truth 12차 반영
 
 ### Added (신규)
