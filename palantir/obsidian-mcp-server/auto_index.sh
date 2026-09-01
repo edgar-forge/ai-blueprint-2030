@@ -4,8 +4,9 @@
 
 set -e
 
-LOG="$HOME/obsidian-mcp-server/indexer_auto.log"
-cd $HOME/obsidian-mcp-server
+SERVER_DIR="${SERVER_DIR:-$HOME/obsidian-mcp-server}"
+LOG="$SERVER_DIR/indexer_auto.log"
+cd "$SERVER_DIR"
 
 # 이미 인덱서가 돌고 있으면 스킵 (중복 실행 방지)
 if pgrep -f "indexer.py" > /dev/null; then

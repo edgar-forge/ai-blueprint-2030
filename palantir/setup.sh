@@ -158,7 +158,8 @@ fi
 for pyfile in "$REPO_MCP_DIR"/*.py; do
     [ -f "$pyfile" ] || continue
     BASENAME=$(basename "$pyfile")
-    sed "s|{여기에_본인_볼트_절대경로}|${VAULT_PATH}|g" "$pyfile" > "${MCP_DEST}/${BASENAME}"
+    sed -e "s|{여기에_본인_볼트_절대경로}|${VAULT_PATH}|g" \
+        -e "s|/path/to/your/obsidian-vault|${VAULT_PATH}|g" "$pyfile" > "${MCP_DEST}/${BASENAME}"
     success "Copied ${BASENAME}"
 done
 

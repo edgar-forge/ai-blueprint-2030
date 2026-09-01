@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # ─── 설정 ───
-VAULT_PATH = "/path/to/your/obsidian-vault"
+VAULT_PATH = os.environ.get("VAULT_PATH", "/path/to/your/obsidian-vault")
 DB_PATH = os.path.expanduser("~/obsidian-mcp-server/vault.lancedb")
 TABLE_NAME = "notes"
 EMBEDDING_MODEL = "nlpai-lab/KURE-v1"  # 2026-04-21 교체. 1024D, 8192 토큰, MTEB-ko NDCG@5 0.6748 (1위)
