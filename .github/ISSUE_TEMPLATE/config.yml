@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 먼저 AI에게 묻기
+    url: https://github.com/edgar-forge/ai-blueprint-2030/blob/main/%EC%84%B1%EC%9B%90%EC%97%90%EA%B2%8C_%EB%AC%BB%EA%B8%B0.md
+    about: 이 파일을 ChatGPT · Gemini · NotebookLM에 올리고 물어보세요. Claude Code라면 저장소 폴더에서 그냥 물으면 됩니다. 웬만한 질문은 여기서 풀립니다.
+  # 오픈채팅 링크 자리 (방을 연 뒤) — 방을 열면 아래 url을 오픈채팅 주소로 바꾼다. 그 전까지는 README의 안내로 간다.
+  - name: 오픈채팅 (방을 연 뒤)
+    url: https://github.com/edgar-forge/ai-blueprint-2030#%EA%B6%81%EA%B8%88%ED%95%9C-%EA%B2%83%EC%9D%84-%EB%AC%BB%EB%8A%94-%EA%B3%B3
+    about: 자료를 넣고 물어봐도 정말 모르겠으면 오픈채팅으로 오세요. 방을 열면 링크가 여기 들어갑니다.

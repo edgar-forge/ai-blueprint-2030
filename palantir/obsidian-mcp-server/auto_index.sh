@@ -1,6 +1,6 @@
 #!/bin/bash
 # obsidian-search 자동 증분 인덱싱 스크립트
-# launchd가 30분마다 호출. 변경 없으면 0.1초에 끝남.
+# VSCode가 볼트 폴더를 열 때 호출(.vscode/tasks.json). 손으로 돌려도 된다. 변경 없으면 0.1초에 끝남.
 
 set -e
 

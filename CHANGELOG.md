@@ -6,6 +6,87 @@
 
 ---
 
+## [2026-10-10] — 만든 사람이 실제로 쓰는 세팅만 넣는다 (세팅 다섯 장 · 옵시디언 설정)
+
+### Added (추가)
+
+- `세팅/` — 만든 사람이 실제로 쓰는 세팅 다섯 장. 받는 사람 눈높이로, 만든 사람의 말은 「」 원문만.
+  - `옵시디언.md` — 설치 → 코어 플러그인 열여섯(Templates는 폴더 `Templates`) → 커뮤니티 플러그인 넷(Calendar · Periodic Notes · Smart Typography, Importer는 옮겨 올 때 한 번)의 설치 법과 설정값 → 기본 동작 설정 세 줄 → 단축키 여섯 → 「나는 이렇게 쓴다」.
+  - `VS Code.md` — 설치 · 확장 둘(Claude Code · 한국어 팩) · 볼트 폴더를 열면 Claude Code가 보인다 · 검색 엔진을 깐 사람만: 볼트를 열 때 색인(`.vscode/tasks.json`)과 자동 작업 허용 설정(`task.allowAutomaticTasks`).
+  - `검색 엔진.md` — 무엇인가(뜻으로 찾기 · KURE-v1 · LanceDB) · 언제 붙이나(노트 수백 장 뒤) · 설치는 `검색/README.md`로 · 무게(모델 약 2GB, 세션에서 처음 검색할 때 메모리에 올라감).
+  - `LLM 위키.md` — 볼트 밖에 두는 구조 지도 · Claude Code 플러그인 llm-wiki 설치 두 줄 · 쌓인 뒤에 만든다(30일의 4주차 자리).
+  - `MCP 서버.md` — 만든 사람의 질문(10/10) 그대로 → 답(이 서버는 읽기만 한다 · 서버 없이도 Claude Code는 볼트를 읽는다 · 더해 주는 것은 뜻으로 찾기) → 결론(선택).
+- `vault-template/.obsidian/` — 볼트 틀의 옵시디언 설정. `core-plugins.json` · `community-plugins.json`(calendar · periodic-notes · obsidian-smart-typography) · `app.json`(첨부 Attachments · 새 노트 Reference · 링크 자동 갱신) · `templates.json`(폴더 Templates) · `hotkeys.json`(단축키 여섯) · `plugins/periodic-notes/data.json`(일간 `YYYY. MM. DD` · To_Process_Daily · 틀 `Templates/일간 노트`, 주간 · 월간) · `plugins/calendar/data.json`. 플러그인 본체는 넣지 않았다. 옵시디언에서 설치하면 폴더가 생기고 이 설정이 적용된다.
+
+### Changed (변경)
+
+- `성원에게_묻기/옵시디언 플러그인 뭐 깔아요.md` — 커뮤니티 플러그인 목록을 넷으로(Calendar · Periodic Notes · Smart Typography · Importer는 옮겨 올 때 한 번). 머리의 「갱신 예정」 줄을 지우고 `세팅/옵시디언.md`로 가는 줄을 더했다. 만든 사람의 「」 인용은 그대로. 묶음 `성원에게_묻기.md`의 같은 구간도 똑같이 바꿨다.
+- `README.md` — 「여기 있는 것」에 `세팅/` 다섯 장, `vault-template/` 줄에 옵시디언 설정, `palantir/` 줄에 백업 스크립트(선택).
+- `START.md` — 2단계 복사에 `vault-template/.obsidian/` 설정도 같이, 커뮤니티 플러그인 셋은 옵시디언에서 설치하도록 `세팅/옵시디언.md` 3절을 알려 준다.
+- `palantir/README.md` — 폴더 목록에서 텔레그램 · 도구 메모 줄을 지우고, `backup/`에 「백업하고 싶은 사람만, 비공개 저장소로」 설명을 붙였다. `setup.sh` 설명을 새 사용법(인자 · 환경 변수 · 등록 명령)으로.
+- `palantir/obsidian-mcp-server/indexer.py · search.py · server.py` — 2026-04 판을 만든 사람이 지금 쓰는 판으로 바꿨다(제목 글자 겹침 보너스 · 폴더 보너스 · 브릿지 보너스 0 · 도움말 덧셈 공식). 볼트 경로는 환경 변수 `VAULT_PATH`, 검색 기록은 `OBSIDIAN_SEARCH_LOG=1`일 때만 서버 옆 `logs/`에.
+- `palantir/setup.sh` — 고장 셋을 고쳤다. 볼트 경로를 첫 인자 또는 `VAULT_PATH`로 받고 키보드가 없을 때는 묻지 않는다(전에는 Claude Code가 돌리면 0단계에서 조용히 멈췄다). Claude Code 등록을 `~/.claude/.mcp.json` 통째 쓰기 대신 `claude mcp add --scope user`로(이미 있으면 건드리지 않고, `claude`가 없으면 명령을 보여 주고 끝). `langchain-text-splitters`가 pip 목록에 빠져 첫 색인이 실패하던 것을 넣었다.
+- `검색/README.md` · `START.md` 5단계 — 새 사용법과 등록 자리(`~/.claude.json`), 설치는 백그라운드로, 윈도우는 안 된다는 한 줄.
+
+### Removed (제거)
+
+- `palantir/telegram-pipeline/`(5파일) — 텔레그램 메모를 볼트 저장소에 넣던 장치. 만든 사람도 2026-04 뒤로 쓰지 않는다.
+- `palantir/claude-code-tools.md` · `palantir/obsidian-mcp-server/RESUME_AT_HOME.md` — 2026-04의 개인 메모 둘.
+
+---
+
+## [2026-10-09] — 궁금한 것은 만든 사람의 말로 답한다 (답 파일 · 읽는 규칙 · 예시)
+
+### Added (추가)
+
+- `CLAUDE.md`(저장소 루트) — Claude Code가 이 폴더에서 먼저 읽는 규칙. 세팅 요청이면 `START.md`의 「Claude Code가 할 일」을 따른다(「세팅해 줘」만 쳐도 시작). 질문이면 `성원에게_묻기/`의 답 파일부터 읽고 그 문장으로 짧게, 실행 중심으로 답한다. 답 파일에 없으면 없다고 밝히고 오픈채팅을 알려 준다. 상주 작업을 만들지 않고, 사람이 쓴 문장을 고치지 않는다.
+- `성원에게_묻기/` — 답 파일 열일곱. 질문 하나에 파일 하나, 파일 이름이 질문이다(물음표는 파일 이름에서 빼고 제목에만). 폴더 `README.md`에 목록과 쓰는 법.
+  - PARA가 뭐예요 · 슬립박스는 왜 써요 · Attachments는 뭐예요 · 레퍼런스는 어떻게 써요 · 클로드 코드 어떻게 설치해요 · 옵시디언 플러그인 뭐 깔아요 · 메모는 어디에 먼저 적어요 · AI가 틀리면 어떡해요 · 프롬프트를 배워야 하나요 · 노션이랑 뭐가 달라요 · LLM 위키는 지금 필요해요 · 검색 엔진은 꼭 필요해요 · 프롬프트는 어디 있어요 · 돈이 얼마나 들어요 · 클로드 말고 다른 AI로도 돼요 · AI가 정리하면 내 공부는요 · 윈도우에서도 돼요
+- `성원에게_묻기.md`(루트) — 위 폴더를 한 파일로 이어 붙인 묶음. ChatGPT · Gemini · NotebookLM에 올리는 용도. 원본은 폴더다.
+- `예시/` — 만든 사람 볼트의 실제 노트 몇 장 + `README.md`. 이렇게 쓴다는 참고용.
+- `.github/ISSUE_TEMPLATE/config.yml` — 빈 이슈를 막고, 이슈 화면에 버튼 둘(먼저 AI에게 묻기 · 오픈채팅). 오픈채팅 주소는 방을 연 뒤에 넣는다.
+
+### Changed (변경)
+
+- `README.md` — 「여기 있는 것」에 `CLAUDE.md` · `성원에게_묻기/` · `성원에게_묻기.md` · `예시/`. 「궁금한 것을 묻는 곳」의 순서를 자료를 AI에 넣고 묻기 → 오픈채팅 → Issues로. 업데이트 절은 질문의 답이 `성원에게_묻기/`로 돌아온다고 고침. 30일 줄에 「초안, 영상 뒤에 다시 씀」 표시.
+- `START.md` — 2단계에 `성원에게_묻기/`를 볼트 `3. Resource/성원에게_묻기/`로 복사(없는 것만).
+- `vault-template/CLAUDE.md` — §4 작업 표에 「궁금한 것」 줄(답 파일 먼저, 그 문장으로).
+- `예시/` — 옮겨 온 노트에서 네 곳을 가렸다(주간 한 줄 · 9/15 일간 한 문장 · 프로젝트 카드의 내부 출처 줄과 폴더 이름 줄). `예시/README.md`의 「손댄 것」과 일간 · 카드의 안내 블록에 가림을 적었다.
+- `vault-template/` 아래 `_여기는.md` 17개 — 제목 + 한두 문장으로 줄이고 설명은 해당 답 파일로 보냄. 설명을 두 군데에 쓰지 않는다. `Processed_Weekly/_여기는.md` 한 줄 채움. `0. Slip-Box/_여기는.md`에 영구 노트 번호(HU · CU · NA · GR · LR + 숫자 · 영문) 한 줄 설명.
+- `30일/README.md` — 머리에 한 블록: 유튜브 영상을 먼저 만든 뒤 다시 쓴다(성원 10/9 생각), 초안이라 바뀐다. 본문은 검색 엔진 '선택' 표시 두 곳(2주 3번 · 졸업 조건 2) 말고 그대로.
+
+### Fixed (수정)
+
+- `START.md` · `검색/README.md` · `palantir/setup.sh` — 한국어 검색 모델(KURE-v1) 크기를 약 500MB에서 약 2GB로 바로잡음 (2026-10-08).
+- 아래 [2026-10-07] 기록 — `palantir/nightly-synapse/` 파일 수를 11에서 10으로 바로잡음(`palantir/templates/CLAUDE.md`는 따로 적힌 한 줄이다).
+
+---
+
+## [2026-10-07] — 링크 하나로 세팅 + 30일 + 질문 창구 (세팅을 한번에, 궁금한 것은 묻는다)
+
+### Added (추가)
+
+- `START.md` — 첫 동작. Claude Code에게 이 파일을 읽게 하면 볼트 틀 복사 · CLAUDE.md 채우기 · 첫 일간 노트까지 대신한다. 검색 엔진은 선택 단계.
+- `vault-template/` — 볼트 틀. PARA 다섯 폴더 + `0. Slip-Box/`(인간 · 문화 · 자연 · 잠재성 · 삶의 법칙 · 개념 · 상태 허브) + `My Think/1. 일간 · 2. 주간`, 한국어 `CLAUDE.md`(라우터 · 항상 참인 규칙 · 자동 승격 금지 · 내 언어 원칙), `Templates/`(일간 노트 · 주간 검토 다섯 칸 · 영구 노트), `개념/` 양식(단어 · 행동 두 칸), `.vscode/tasks.json`(볼트를 열 때 색인).
+- `30일/README.md` — 30일 커리큘럼 초안 v0. 0일 세팅(AI) · 1주 축적 · 2주 사용 · 3주 창조 · 4주 내 단어 · 주말 갱신 다섯 칸 · 졸업 조건 다섯.
+- `검색/README.md` — 검색 엔진 설치 한 장. 긴 설명은 guides/03에 그대로.
+- `.github/ISSUE_TEMPLATE/질문.md` — 질문 창구. 어디서 막혔나 · 무엇을 해 봤나 · 원하는 결과.
+
+### Changed (변경)
+
+- `README.md` — 첫 줄이 첫 동작(START). 「궁금한 것을 묻는 곳」(Issues · 오픈채팅 · 30일 동행) 추가. 가이드 세 권은 「왜」, 새 폴더들은 「오늘 할 것」으로 자리 정리.
+- `palantir/setup.sh` — 하는 일을 셋으로 줄임: 볼트 틀 복사(없는 것만) · 검색 서버 설치 · 첫 색인. Node.js · Ground Truth 입력 불필요.
+- `palantir/README.md` — 위 변경대로 다시 씀. 백업 · 동기화 스크립트는 「수동 · 선택」으로.
+- `palantir/obsidian-mcp-server/auto_index.sh` — 머리 주석이 launchd를 가리키던 것을 VSCode folderOpen으로.
+
+### Removed (제거)
+
+- `palantir/nightly-synapse/`(10파일)와 setup.sh의 Nightly Synapse · LaunchAgents 단계 — 상주 자동화는 2026-09에 만든 사람 본인 볼트에서도 걷어냈다. 받는 사람이 켜게 할 이유가 없다.
+- `palantir/templates/CLAUDE.md`(영어 4월 판) — `vault-template/CLAUDE.md`(한국어)로 대체.
+- README의 코칭 가격 비교 문장.
+
+---
+
 ## [2026-04-22 수정] — 자동 인덱싱 방식 변경 (launchd → VSCode folderOpen) + 데이터 손실 방어 코드
 
 ### ⚠️ Incident

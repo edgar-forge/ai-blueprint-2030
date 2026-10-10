@@ -1,134 +1,40 @@
-# palantir/ -- Personal Palantir Installer
+# palantir/ — 검색 엔진 소스와 설치 스크립트
 
-This directory contains the one-click installer and source files for the Personal Palantir system: an Obsidian-based AI second brain that uses Claude MCP for semantic search, automated nightly note classification, and vault backup/sync automation. Run `setup.sh` and the entire system is configured on your Mac in minutes.
-
----
-
-## Prerequisites
-
-| Tool | Version | Check |
-|------|---------|-------|
-| Python | 3.9+ | `python3 --version` |
-| Node.js | 18+ | `node --version` |
-| npm | any | `npm --version` |
-| git | any | `git --version` |
-| Claude Code CLI | latest | `claude --version` |
-| Obsidian | any | installed and vault created |
-| macOS | 12+ | for LaunchAgents (Linux users: use cron instead) |
-
----
-
-## Quick Start
+`setup.sh` 하나가 셋을 합니다. 볼트 틀 복사(없는 것만) → 검색 서버 설치와 Claude Code 등록 → 첫 색인. 보통은 저장소 루트의 [START.md](../START.md)를 Claude Code에게 읽히면 이 스크립트까지 Claude가 돌립니다. 설치만 따로 하려면:
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/your-username/ai-blueprint-2030.git
-cd ai-blueprint-2030/palantir
-
-# 2. Run the installer
-chmod +x setup.sh
-./setup.sh
-
-# 3. Restart Claude Code to pick up the MCP server
+bash palantir/setup.sh                    # 볼트 경로를 묻는다
+bash palantir/setup.sh "<볼트 경로>"       # 묻지 않고 바로 (환경 변수 VAULT_PATH 도 된다)
 ```
 
-The installer will ask for your vault path and Ground Truth file location, then handle everything else.
+볼트 경로는 첫 인자 → `VAULT_PATH` → 질문 순서로 정하고, 키보드 입력이 없으면(Claude Code가 돌릴 때) 묻지 않고 기본값 `~/Documents/Obsidian Vault`를 씁니다. Claude Code 등록은 `claude mcp add --scope user`로 합니다 — `claude` 명령이 없으면 등록 한 줄을 화면에 보여 주고 끝냅니다. 맥(macOS) 전용이고 윈도우에서는 돌지 않습니다. 설명은 [검색/README.md](../검색/README.md).
 
----
+## 필요한 것
 
-## What Gets Installed
+| 것 | 확인 |
+|---|---|
+| Python 3.9+ | `python3 --version` |
+| Claude Code | `claude --version` — 검색 서버를 쓰는 쪽 |
+| Obsidian | 설치만. 볼트는 START가 만든다 |
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| MCP Server | `~/obsidian-mcp-server/` | Semantic search via vector embeddings (LanceDB) + Claude MCP integration |
-| Python venv | `~/obsidian-mcp-server/venv/` | Isolated Python environment with sentence-transformers, lancedb, mcp |
-| Nightly Synapse | `<vault>/scripts/nightly-synapse/` | Auto-classifies today's notes using Claude CLI, generates reports |
-| Sync script | `~/ObsidianBackup/sync_from_github.sh` | Bidirectional GitHub sync with .env safety check |
-| Backup script | `~/ObsidianBackup/backup_vault.sh` | Daily tar.gz backup with 7-day retention |
-| MCP config | `~/.claude/.mcp.json` | Registers the MCP server with Claude Code |
-| LaunchAgent: sync | `~/Library/LaunchAgents/com.user.obsidian-github-sync.plist` | Runs sync every 30 minutes |
-| LaunchAgent: backup | `~/Library/LaunchAgents/com.user.obsidian-backup.plist` | Runs backup daily at 21:30 |
-| LaunchAgent: synapse | `~/Library/LaunchAgents/com.user.nightly-synapse.plist` | Runs classification daily at 21:30 |
+Node.js · git · macOS LaunchAgents는 더 이상 필요 없습니다.
 
----
-
-## Daily Usage
-
-**Semantic search** -- Just ask Claude naturally in Claude Code:
-
-```
-"What are my notes about decision-making?"
-"Find notes related to system thinking"
-```
-
-Claude automatically calls the MCP `search_notes` tool and answers based on your vault.
-
-**Manual indexing** (after adding many notes):
-
-```bash
-cd ~/obsidian-mcp-server
-./venv/bin/python indexer.py        # incremental (changed notes only)
-./venv/bin/python indexer.py --full # full re-index
-```
-
-**Manual Nightly Synapse** (run classification now):
-
-```bash
-cd <vault>/scripts/nightly-synapse
-node run-now.js
-```
-
-**Check sync/backup logs**:
-
-```bash
-cat ~/ObsidianBackup/sync.log
-ls -la ~/ObsidianBackup/ObsidianVault_*.tar.gz
-```
-
----
-
-## Troubleshooting
-
-| Problem | Likely Cause | Solution |
-|---------|-------------|----------|
-| MCP server not showing in Claude Code | Path error in `.mcp.json` | Check `~/.claude/.mcp.json` uses absolute paths (no `~`) |
-| MCP server crashes on start | Python packages missing | `~/obsidian-mcp-server/venv/bin/pip install mcp[cli]` |
-| Search returns no results | Indexer never ran or vault path wrong | Run `./venv/bin/python indexer.py --full` |
-| Search results are stale | Incremental index not running | Re-run indexer or set up a cron/LaunchAgent for it |
-| Claude doesn't use the search tool | Claude Code needs restart | Quit and relaunch Claude Code |
-| Nightly Synapse fails | Claude CLI not installed | Install Claude Code CLI and verify with `claude --version` |
-| Sync script permission denied | Missing execute bit | `chmod +x ~/ObsidianBackup/sync_from_github.sh` |
-| LaunchAgent not running | Not loaded or plist error | `launchctl list \| grep com.user` to check; reload with `launchctl load <plist>` |
-| Backup too large | .git or cache included | Backup script already excludes .git; check for other large dirs |
-| Git push fails | Auth or remote not set | Ensure `git remote -v` shows correct origin and you have push access |
-
----
-
-## File Structure
+## 폴더
 
 ```
 palantir/
-  setup.sh                        # One-click installer
-  README.md                       # This file
-  backup/
-    sync_from_github.sh           # GitHub bidirectional sync (template)
-    backup_vault.sh               # Daily backup (template)
-  templates/
-    CLAUDE.md                     # Template vault rules for users to customize
-  obsidian-mcp-server/
-    bridge_keywords.py            # Bridge keyword dictionary (template)
-    (indexer.py, search.py, server.py are in the guide)
-  nightly-synapse/
-    package.json                  # Node.js dependencies
-    detector.js                   # Modified-note detector
-    (classifier.js, synapse.js, report.js, etc. are in the guide)
+  setup.sh                  설치 스크립트 — 하는 일 셋
+  README.md                 이 파일
+  obsidian-mcp-server/      검색 서버 소스 (indexer.py · search.py · server.py · auto_index.sh · bridge_keywords.py)
+  backup/                   백업 · 동기화 스크립트 — 백업하고 싶은 사람만, 비공개 저장소로 (아래)
 ```
 
----
+## 백업 · 동기화 — 백업하고 싶은 사람만, 비공개 저장소로
 
-## Customization
+볼트를 GitHub에 올려 백업하고 싶은 사람만 씁니다. `sync_from_github.sh`는 볼트 전체를 자동으로 커밋해 올리니, 받는 저장소는 반드시 **비공개(Private)**로 만듭니다. 공개 저장소에 걸면 일기와 메모가 그대로 공개됩니다. `backup_vault.sh`는 볼트를 압축해 두고 7일 지난 압축본을 지웁니다.
 
-1. **Bridge keywords** -- Edit `~/obsidian-mcp-server/bridge_keywords.py` with your own themes. Re-run indexer after changes.
-2. **Ground Truth** -- Create a classification rules document in your vault. Update the path in `classifier.js`.
-3. **CLAUDE.md** -- Copy `templates/CLAUDE.md` to your vault root and customize every section.
-4. **Schedules** -- Edit the plist files in `~/Library/LaunchAgents/` to change sync/backup times.
+`backup/`의 두 스크립트는 설치되지 않습니다. 쓰려면 `~/ObsidianBackup/`에 복사해 안의 경로를 고치고, VSCode `.vscode/tasks.json`의 folderOpen 작업으로 겁니다(`vault-template/.vscode/tasks.json`에 색인 작업이 같은 방식으로 들어 있으니 그 옆에 하나 더 두면 됩니다). 30분 주기 상주 작업은 두지 않습니다 — 2026년 4월 색인 사고와 2026년 9월 성능 문제로 만든 사람 본인도 걷어냈습니다([CHANGELOG](../CHANGELOG.md)).
+
+## 막히면
+
+[검색/README.md](../검색/README.md)의 「막히면」 표, 그래도 안 되면 [Issues](../../../issues/new?template=%EC%A7%88%EB%AC%B8.md).

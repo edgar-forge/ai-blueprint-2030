@@ -52,7 +52,10 @@ SINGLE_CHUNK_THRESHOLD = 800  # 이 이하 파일은 단일 청크 유지
 MIN_CLEAN_CHARS = 10  # 이 미만이면 인덱싱 스킵
 EMBEDDING_BATCH_SIZE = 32  # 4-thread + 16GB RAM 환경: 더 큰 배치로 throughput 확보
 MAX_SEQ_LENGTH = 512  # KURE-v1 기본. 발열은 CPU 1 thread로 제어
-SKIP_DIRS = {".obsidian", ".trash", ".smart-env", "Attachments", ".git"}
+# 개념_묶음 = 정답세트 검토표·개념 39개 원본 표가 사는 작업용 폴더 (2026-08-20 제외).
+# 안에 사용자 문장과 개념 이름이 그대로 적혀 있어서 검색하면 진짜 노트를 밀어내고 상위를 먹는다.
+# 실측: 정답세트 20줄 중 17줄에서 상위 3위 안에 진입. 빼니까 1위 10 → 13.
+SKIP_DIRS = {".obsidian", ".trash", ".smart-env", "Attachments", ".git", "개념_묶음"}
 
 # ─── PARA 폴더 가중치 ───
 SLIP_BOX_WEIGHT = 3.0

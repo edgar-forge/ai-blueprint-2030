@@ -4,15 +4,49 @@
 - 질문을 받으면 관련 노트를 찾아서 반환
 """
 
+import json
 import os
+from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
 from search import search, detect_query_bridge_keywords
 
 VAULT_PATH = os.environ.get("VAULT_PATH", "/path/to/your/obsidian-vault")
 
+# ─── 검색 로그 (기본 끔) ───
+# 환경 변수 OBSIDIAN_SEARCH_LOG=1 일 때만 질의와 상위 5개를 이 파일 옆 logs/query_log.jsonl 에 남긴다.
+LOG_ENABLED = os.environ.get("OBSIDIAN_SEARCH_LOG", "") == "1"
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+QUERY_LOG_PATH = os.path.join(LOG_DIR, "query_log.jsonl")
+LOG_TOP_COUNT = 5
+
 # MCP 서버 생성
 mcp = FastMCP("obsidian-search")
+
+
+def log_query(query: str, results: list) -> None:
+    """검색 1회를 query_log.jsonl에 JSONL 한 줄로 append한다.
+
+    OBSIDIAN_SEARCH_LOG=1 일 때만 남긴다(기본 끔).
+    실패는 조용히 무시한다. 로깅은 검색 결과에 절대 영향을 주지 않는다.
+    """
+    if not LOG_ENABLED:
+        return
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        record = {
+            "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "query": query,
+            "top": [
+                {"path": r.get("path"), "score": r.get("score")}
+                for r in results[:LOG_TOP_COUNT]
+            ],
+            "n": len(results),
+        }
+        with open(QUERY_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
 
 
 @mcp.tool()
@@ -20,10 +54,12 @@ def search_notes(query: str, top_k: int = 5) -> str:
     """
     옵시디언 볼트에서 질문과 관련된 노트를 검색합니다.
 
-    점수 계산: (벡터유사도 + 제목보너스 + 브릿지키워드보너스) × 폴더가중치
-    - Slip-Box/P1E 노트 → 3배 가중치
-    - Project 노트 → 2배 가중치
-    - 브릿지 키워드가 겹치면 추가 보너스
+    점수 계산: 벡터유사도 + 제목보너스 + 브릿지키워드보너스 + 폴더보너스 (가산·감산 혼합)
+    - 폴더 가중치는 점수에 반영하지 않는다 (Slip-Box, Project 보너스 0.0)
+    - 4. Archives 경로는 0.5 감점
+    - 파일명이 질문과 글자로 겹치는 만큼 최대 +0.15
+    - 0. Slip-Box/개념/ 노트는 +0.05
+    - 브릿지 키워드 보너스는 0 (꺼 둠)
 
     Args:
         query: 검색할 질문 (예: "내 업의 본질", "습관을 만드는 방법")
@@ -35,6 +71,7 @@ def search_notes(query: str, top_k: int = 5) -> str:
 
     top_k = min(max(top_k, 1), 20)
     results = search(query, top_k=top_k)
+    log_query(query, results)
 
     if not results:
         return "관련 노트를 찾지 못했습니다."

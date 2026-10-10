@@ -1,0 +1,35 @@
+{
+  "showGettingStartedBanner": true,
+  "hasMigratedDailyNoteSettings": false,
+  "hasMigratedWeeklyNoteSettings": false,
+  "daily": {
+    "format": "YYYY. MM. DD",
+    "template": "Templates/일간 노트",
+    "folder": "2. Area of Responsibility/My Think/1. 일간/To_Process_Daily",
+    "enabled": true
+  },
+  "weekly": {
+    "format": "",
+    "template": "",
+    "folder": "2. Area of Responsibility/My Think/2. 주간/To_Process_Weekly",
+    "enabled": true
+  },
+  "monthly": {
+    "format": "YYYY. MM",
+    "template": "",
+    "folder": "2. Area of Responsibility/My Think/3. 월간/To_Process_Monthly",
+    "enabled": true
+  },
+  "quarterly": {
+    "format": "",
+    "template": "",
+    "folder": "",
+    "enabled": false
+  },
+  "yearly": {
+    "format": "",
+    "template": "",
+    "folder": "",
+    "enabled": false
+  }
+}

@@ -1,437 +1,193 @@
 #!/bin/bash
 # =============================================================================
-# Personal Palantir — One-Click Install Script
+# AI Blueprint 2030 — 설치 스크립트 (세팅을 한 번에)
 # =============================================================================
-# Obsidian + Claude MCP + Nightly Synapse + Backup/Sync automation
+# 하는 일 셋:
+#   1. vault-template/ 을 볼트로 복사한다 — 이미 있는 파일은 건드리지 않는다
+#   2. 검색 서버(Python)를 ~/obsidian-mcp-server/ 에 설치하고 Claude Code에 등록한다
+#   3. 첫 색인을 돌린다 (한국어 검색 모델 KURE-v1 약 2GB를 한 번 받는다)
 #
-# Usage:
-#   chmod +x setup.sh && ./setup.sh
+# 쓰는 법 (저장소 루트에서):
+#   bash palantir/setup.sh                          # 볼트 경로를 묻는다 (터미널에서 직접 돌릴 때)
+#   bash palantir/setup.sh "$HOME/Documents/내 볼트"  # 볼트 경로를 첫 인자로
+#   VAULT_PATH="$HOME/Documents/내 볼트" bash palantir/setup.sh   # 환경 변수로
+#   키보드 입력이 없으면(Claude Code가 돌릴 때) 묻지 않는다. 인자도 환경 변수도 없으면
+#   기본값 ~/Documents/Obsidian Vault 를 쓴다.
+#   OVERWRITE_SERVER=1 이면 이미 있는 검색 서버 파일을 묻지 않고 덮어쓴다(.bak_날짜 를 남김).
 #
-# What this does:
-#   1. Copies MCP server (Python) to ~/obsidian-mcp-server/
-#   2. Copies Nightly Synapse (Node.js) to <vault>/scripts/nightly-synapse/
-#   3. Copies backup/sync scripts to ~/ObsidianBackup/
-#   4. Creates ~/.claude/.mcp.json
-#   5. Creates macOS LaunchAgents for automation
-#   6. Runs first indexing
+# Claude Code 등록은 claude mcp add --scope user 로 한다(설정은 ~/.claude.json 에 들어간다).
+# claude 명령이 없으면 등록 명령만 보여 주고 끝낸다.
+#
+# 만들지 않는 것: 상주 작업(launchd · cron). 색인은 VSCode로 볼트를 열 때 한 번 돈다.
 # =============================================================================
 
 set -euo pipefail
 
-# ---------------------------------------------------------------------------
-# Colors
-# ---------------------------------------------------------------------------
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
+info()    { echo -e "${BLUE}[정보]${NC}  $1"; }
+success() { echo -e "${GREEN}[완료]${NC}  $1"; }
+warn()    { echo -e "${YELLOW}[주의]${NC}  $1"; }
+error()   { echo -e "${RED}[오류]${NC}  $1"; }
+step()    { echo -e "\n${BOLD}==> $1${NC}"; }
+die()     { error "$1"; exit 1; }
 
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-info()    { echo -e "${BLUE}[INFO]${NC}  $1"; }
-success() { echo -e "${GREEN}[OK]${NC}    $1"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC}  $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; }
-step()    { echo -e "\n${BOLD}==> Step $1: $2${NC}"; }
-
-die() {
-    error "$1"
-    exit 1
-}
-
-# ---------------------------------------------------------------------------
-# Resolve script directory (where the repo source files live)
-# ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_MCP_DIR="${SCRIPT_DIR}/obsidian-mcp-server"
-REPO_SYNAPSE_DIR="${SCRIPT_DIR}/nightly-synapse"
-REPO_BACKUP_DIR="${SCRIPT_DIR}/backup"
-
+REPO_TEMPLATE_DIR="${REPO_DIR}/vault-template"
 HOME_DIR="$HOME"
 
 # ---------------------------------------------------------------------------
-# Step 0: Interactive inputs
+# 0. 볼트 경로
 # ---------------------------------------------------------------------------
-step "0" "Gathering configuration"
-
-# Vault path
-read -r -p "Obsidian Vault path [${HOME_DIR}/Documents/Obsidian Vault]: " INPUT_VAULT
-VAULT_PATH="${INPUT_VAULT:-${HOME_DIR}/Documents/Obsidian Vault}"
-
-# Normalize: expand ~ if user typed it
+step "0. 볼트 경로"
+DEFAULT_VAULT="${HOME_DIR}/Documents/Obsidian Vault"
+INPUT_VAULT="${1:-${VAULT_PATH:-}}"
+if [ -z "$INPUT_VAULT" ]; then
+    if [ -t 0 ]; then
+        read -r -p "Obsidian 볼트 경로 [${DEFAULT_VAULT}]: " INPUT_VAULT || INPUT_VAULT=""
+    else
+        info "키보드 입력이 없어서 묻지 않는다. 볼트 경로를 바꾸려면 첫 인자나 VAULT_PATH 로 준다."
+    fi
+fi
+VAULT_PATH="${INPUT_VAULT:-$DEFAULT_VAULT}"
 VAULT_PATH="${VAULT_PATH/#\~/$HOME_DIR}"
-
 if [ ! -d "$VAULT_PATH" ]; then
-    warn "Vault directory does not exist: ${VAULT_PATH}"
-    read -r -p "Create it? (y/N): " CREATE_VAULT
-    if [[ "$CREATE_VAULT" =~ ^[Yy]$ ]]; then
-        mkdir -p "$VAULT_PATH"
-        success "Created vault directory"
-    else
-        die "Vault directory is required. Aborting."
-    fi
-fi
-
-# Ground Truth file path (relative to vault, used by classifier.js)
-echo ""
-echo "The classifier needs a 'Ground Truth' file — your note classification rules."
-echo "This is a relative path inside your vault."
-echo "Example: 2. Area of Responsibility/AI 설정/AI_세컨드브레인_Ground_Truth.md"
-read -r -p "Ground Truth relative path: " GROUND_TRUTH_REL
-
-if [ -z "$GROUND_TRUTH_REL" ]; then
-    warn "No Ground Truth path provided. classifier.js will use an empty string."
-    warn "You can edit it later in <vault>/scripts/nightly-synapse/classifier.js"
-fi
-
-# Verify the file exists (non-blocking warning)
-if [ -n "$GROUND_TRUTH_REL" ] && [ ! -f "${VAULT_PATH}/${GROUND_TRUTH_REL}" ]; then
-    warn "Ground Truth file not found at: ${VAULT_PATH}/${GROUND_TRUTH_REL}"
-    warn "Continuing anyway — you can create it later."
-fi
-
-# ---------------------------------------------------------------------------
-# Step 1: Check prerequisites
-# ---------------------------------------------------------------------------
-step "1" "Checking prerequisites"
-
-MISSING=()
-
-check_cmd() {
-    if command -v "$1" &>/dev/null; then
-        success "$1 found: $(command -v "$1")"
-    else
-        error "$1 not found"
-        MISSING+=("$1")
-    fi
-}
-
-check_cmd python3
-check_cmd node
-check_cmd npm
-check_cmd git
-
-# Claude CLI is optional but recommended
-if command -v claude &>/dev/null; then
-    success "claude CLI found: $(command -v claude)"
+    mkdir -p "$VAULT_PATH"
+    success "볼트 폴더를 만들었다: ${VAULT_PATH}"
 else
-    warn "claude CLI not found — Nightly Synapse and MCP features require it."
-    warn "Install: https://docs.anthropic.com/en/docs/claude-code"
+    success "볼트 폴더: ${VAULT_PATH}"
 fi
 
-if [ ${#MISSING[@]} -gt 0 ]; then
-    die "Missing required tools: ${MISSING[*]}. Install them and re-run."
-fi
+# ---------------------------------------------------------------------------
+# 1. 볼트 틀 복사 — 없는 것만
+# ---------------------------------------------------------------------------
+step "1. 볼트 틀 복사 (이미 있는 파일은 건너뜀)"
+[ -d "$REPO_TEMPLATE_DIR" ] || die "vault-template/ 이 없다: ${REPO_TEMPLATE_DIR}"
+COPIED=0; SKIPPED=0
+while IFS= read -r -d '' src; do
+    rel="${src#"$REPO_TEMPLATE_DIR"/}"
+    dst="${VAULT_PATH}/${rel}"
+    if [ -e "$dst" ]; then
+        SKIPPED=$((SKIPPED + 1))
+    else
+        mkdir -p "$(dirname "$dst")"
+        cp "$src" "$dst"
+        COPIED=$((COPIED + 1))
+    fi
+done < <(find "$REPO_TEMPLATE_DIR" -type f -print0)
+success "복사 ${COPIED}개 · 이미 있어서 건너뜀 ${SKIPPED}개"
 
-# Check Python version (need 3.9+)
+# ---------------------------------------------------------------------------
+# 2. 필요한 것 확인
+# ---------------------------------------------------------------------------
+step "2. 필요한 것 확인"
+command -v python3 &>/dev/null || die "python3가 없다. https://www.python.org/downloads/ 에서 3.9 이상을 설치한다."
 PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PY_MAJOR=$(echo "$PY_VERSION" | cut -d. -f1)
-PY_MINOR=$(echo "$PY_VERSION" | cut -d. -f2)
+PY_MAJOR=${PY_VERSION%%.*}; PY_MINOR=${PY_VERSION##*.}
 if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 9 ]; }; then
-    die "Python 3.9+ required. Found: ${PY_VERSION}"
+    die "Python 3.9 이상이 필요하다. 지금: ${PY_VERSION}"
 fi
-success "Python version: ${PY_VERSION}"
-
-# Check Node version (need 18+)
-NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-    die "Node.js 18+ required. Found: $(node -v)"
+success "python3 ${PY_VERSION}"
+if command -v claude &>/dev/null; then
+    success "claude CLI: $(command -v claude)"
+else
+    warn "claude CLI가 없다. 검색 서버는 설치되지만 Claude Code가 있어야 쓸 수 있다: https://docs.anthropic.com/en/docs/claude-code"
 fi
-success "Node version: $(node -v)"
 
 # ---------------------------------------------------------------------------
-# Step 2: Install MCP server (Python)
+# 3. 검색 서버 설치
 # ---------------------------------------------------------------------------
-step "2" "Setting up MCP server at ~/obsidian-mcp-server/"
-
+step "3. 검색 서버 설치 → ~/obsidian-mcp-server/"
+[ -d "$REPO_MCP_DIR" ] || die "소스 폴더가 없다: ${REPO_MCP_DIR}"
 MCP_DEST="${HOME_DIR}/obsidian-mcp-server"
 mkdir -p "$MCP_DEST"
-
-# Copy Python files from repo, replacing {VAULT_PATH} placeholder
-if [ ! -d "$REPO_MCP_DIR" ]; then
-    die "Source directory not found: ${REPO_MCP_DIR}"
+# 이미 검색 서버가 있으면(= 전에 설치했거나 직접 고쳐 쓰는 중) 덮어쓰기 전에 묻고, 덮어쓸 때는 백업을 남긴다
+if [ -f "${MCP_DEST}/server.py" ]; then
+    warn "~/obsidian-mcp-server/ 에 이미 서버 파일이 있다. 직접 고쳐 쓰는 중이면 덮어쓰지 않는 게 맞다."
+    OVERWRITE="${OVERWRITE_SERVER:-}"
+    [ "$OVERWRITE" = "1" ] && OVERWRITE="y"
+    if [ -z "$OVERWRITE" ] && [ -t 0 ]; then
+        read -r -p "저장소 판으로 덮어쓸까? 덮어쓰면 기존 파일은 .bak_날짜 로 남긴다 (y/N): " OVERWRITE || OVERWRITE=""
+    fi
+    if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+        info "서버 파일은 그대로 둔다. 4단계(등록)와 5단계(색인)만 진행한다."
+        SKIP_COPY=1
+    fi
 fi
-
-for pyfile in "$REPO_MCP_DIR"/*.py; do
-    [ -f "$pyfile" ] || continue
-    BASENAME=$(basename "$pyfile")
-    sed -e "s|{여기에_본인_볼트_절대경로}|${VAULT_PATH}|g" \
-        -e "s|/path/to/your/obsidian-vault|${VAULT_PATH}|g" "$pyfile" > "${MCP_DEST}/${BASENAME}"
-    success "Copied ${BASENAME}"
+STAMP=$(date +%Y%m%d_%H%M%S)
+VAULT_SED=$(printf '%s' "$VAULT_PATH" | sed -e 's/[\\|&]/\\&/g')
+for f in "$REPO_MCP_DIR"/*.py "$REPO_MCP_DIR"/*.sh; do
+    [ -f "$f" ] || continue
+    [ "${SKIP_COPY:-0}" = "1" ] && break
+    base=$(basename "$f")
+    [ -f "${MCP_DEST}/${base}" ] && cp "${MCP_DEST}/${base}" "${MCP_DEST}/${base}.bak_${STAMP}"
+    sed -e "s|/path/to/your/obsidian-vault|${VAULT_SED}|g" "$f" > "${MCP_DEST}/${base}"
+    [ "${base##*.}" = "sh" ] && chmod +x "${MCP_DEST}/${base}"
+    success "복사 ${base}"
 done
-
-# Create Python venv
-info "Creating Python virtual environment..."
 if [ ! -d "${MCP_DEST}/venv" ]; then
+    info "Python 가상환경을 만든다..."
     python3 -m venv "${MCP_DEST}/venv"
-    success "Virtual environment created"
+    success "가상환경 생성"
 else
-    warn "Virtual environment already exists — skipping creation"
+    warn "가상환경이 이미 있다 — 그대로 쓴다"
 fi
-
-# Install dependencies
-info "Installing Python dependencies (this may take a few minutes)..."
-"${MCP_DEST}/venv/bin/pip" install --upgrade pip --quiet 2>/dev/null
-"${MCP_DEST}/venv/bin/pip" install sentence-transformers lancedb "mcp[cli]" --quiet 2>/dev/null
-success "Python dependencies installed"
+info "Python 패키지를 설치한다 (몇 분 걸린다)..."
+"${MCP_DEST}/venv/bin/pip" install --upgrade pip --quiet
+"${MCP_DEST}/venv/bin/pip" install sentence-transformers lancedb langchain-text-splitters "mcp[cli]" --quiet
+success "패키지 설치"
 
 # ---------------------------------------------------------------------------
-# Step 3: Install Nightly Synapse (Node.js)
+# 4. Claude Code에 등록
 # ---------------------------------------------------------------------------
-step "3" "Setting up Nightly Synapse at <vault>/scripts/nightly-synapse/"
-
-SYNAPSE_DEST="${VAULT_PATH}/scripts/nightly-synapse"
-mkdir -p "$SYNAPSE_DEST"
-
-if [ ! -d "$REPO_SYNAPSE_DIR" ]; then
-    die "Source directory not found: ${REPO_SYNAPSE_DIR}"
-fi
-
-# Copy JS files, replacing placeholders
-for jsfile in "$REPO_SYNAPSE_DIR"/*.js "$REPO_SYNAPSE_DIR"/*.json; do
-    [ -f "$jsfile" ] || continue
-    BASENAME=$(basename "$jsfile")
-    sed \
-        -e "s|{여기에_본인_볼트_절대경로}|${VAULT_PATH}|g" \
-        -e "s|{VAULT_PATH}|${VAULT_PATH}|g" \
-        -e "s|{분류_기준_문서_경로}|${GROUND_TRUTH_REL}|g" \
-        "$jsfile" > "${SYNAPSE_DEST}/${BASENAME}"
-    success "Copied ${BASENAME}"
-done
-
-# npm install
-info "Installing Node.js dependencies..."
-(cd "$SYNAPSE_DEST" && npm install --silent 2>/dev/null)
-success "Node.js dependencies installed"
-
-# ---------------------------------------------------------------------------
-# Step 4: Install backup & sync scripts
-# ---------------------------------------------------------------------------
-step "4" "Setting up backup scripts at ~/ObsidianBackup/"
-
-BACKUP_DEST="${HOME_DIR}/ObsidianBackup"
-mkdir -p "$BACKUP_DEST"
-
-if [ ! -d "$REPO_BACKUP_DIR" ]; then
-    die "Source directory not found: ${REPO_BACKUP_DIR}"
-fi
-
-LOG_PATH="${BACKUP_DEST}/sync.log"
-
-for shfile in "$REPO_BACKUP_DIR"/*.sh; do
-    [ -f "$shfile" ] || continue
-    BASENAME=$(basename "$shfile")
-    sed \
-        -e "s|{VAULT_PATH}|${VAULT_PATH}|g" \
-        -e "s|{여기에_본인_볼트_절대경로}|${VAULT_PATH}|g" \
-        -e "s|{LOG_PATH}|${LOG_PATH}|g" \
-        -e "s|{여기에_로그파일_경로}|${LOG_PATH}|g" \
-        -e "s|{BACKUP_DIR}|${BACKUP_DEST}|g" \
-        -e "s|{여기에_백업_폴더_경로}|${BACKUP_DEST}|g" \
-        "$shfile" > "${BACKUP_DEST}/${BASENAME}"
-    chmod +x "${BACKUP_DEST}/${BASENAME}"
-    success "Copied ${BASENAME}"
-done
-
-# ---------------------------------------------------------------------------
-# Step 5: Create ~/.claude/.mcp.json
-# ---------------------------------------------------------------------------
-step "5" "Configuring Claude MCP server registration"
-
-CLAUDE_DIR="${HOME_DIR}/.claude"
-MCP_JSON="${CLAUDE_DIR}/.mcp.json"
-mkdir -p "$CLAUDE_DIR"
-
-# If .mcp.json already exists, back it up
-if [ -f "$MCP_JSON" ]; then
-    BACKUP_NAME=".mcp.json.backup.$(date +%Y%m%d%H%M%S)"
-    cp "$MCP_JSON" "${CLAUDE_DIR}/${BACKUP_NAME}"
-    warn "Existing .mcp.json backed up as ${BACKUP_NAME}"
-fi
-
-cat > "$MCP_JSON" << MCPEOF
-{
-  "mcpServers": {
-    "obsidian-search": {
-      "command": "${HOME_DIR}/obsidian-mcp-server/venv/bin/python",
-      "args": ["${HOME_DIR}/obsidian-mcp-server/server.py"],
-      "cwd": "${HOME_DIR}/obsidian-mcp-server"
-    }
-  }
-}
-MCPEOF
-
-success "Created ${MCP_JSON}"
-
-# ---------------------------------------------------------------------------
-# Step 6: Create macOS LaunchAgent plist files
-# ---------------------------------------------------------------------------
-step "6" "Creating macOS LaunchAgents"
-
-LAUNCH_DIR="${HOME_DIR}/Library/LaunchAgents"
-mkdir -p "$LAUNCH_DIR"
-
-NODE_PATH=$(which node)
-
-# 6a. GitHub sync (every 30 minutes)
-SYNC_PLIST="${LAUNCH_DIR}/com.user.obsidian-github-sync.plist"
-cat > "$SYNC_PLIST" << PLISTEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.obsidian-github-sync</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${HOME_DIR}/ObsidianBackup/sync_from_github.sh</string>
-    </array>
-    <key>StartInterval</key>
-    <integer>1800</integer>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>${HOME_DIR}/ObsidianBackup/sync-stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>${HOME_DIR}/ObsidianBackup/sync-stderr.log</string>
-</dict>
-</plist>
-PLISTEOF
-success "Created sync plist"
-
-# 6b. Daily backup (21:30)
-BACKUP_PLIST="${LAUNCH_DIR}/com.user.obsidian-backup.plist"
-cat > "$BACKUP_PLIST" << PLISTEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.obsidian-backup</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${HOME_DIR}/ObsidianBackup/backup_vault.sh</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>21</integer>
-        <key>Minute</key>
-        <integer>30</integer>
-    </dict>
-</dict>
-</plist>
-PLISTEOF
-success "Created backup plist"
-
-# 6c. Nightly Synapse (21:30)
-SYNAPSE_PLIST="${LAUNCH_DIR}/com.user.nightly-synapse.plist"
-cat > "$SYNAPSE_PLIST" << PLISTEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.nightly-synapse</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${NODE_PATH}</string>
-        <string>${VAULT_PATH}/scripts/nightly-synapse/run-now.js</string>
-    </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>21</integer>
-        <key>Minute</key>
-        <integer>30</integer>
-    </dict>
-    <key>WorkingDirectory</key>
-    <string>${VAULT_PATH}/scripts/nightly-synapse</string>
-</dict>
-</plist>
-PLISTEOF
-success "Created synapse plist"
-
-# ---------------------------------------------------------------------------
-# Step 7: Load LaunchAgents
-# ---------------------------------------------------------------------------
-step "7" "Loading LaunchAgents"
-
-load_agent() {
-    local plist_path="$1"
-    local label="$2"
-
-    # Unload first if already loaded (ignore errors)
-    launchctl bootout "gui/$(id -u)/${label}" 2>/dev/null || true
-
-    if launchctl load "$plist_path" 2>/dev/null; then
-        success "Loaded ${label}"
+step "4. Claude Code에 검색 서버 등록 (claude mcp add, 사용자 범위)"
+MCP_PY="${MCP_DEST}/venv/bin/python"
+MCP_SERVER="${MCP_DEST}/server.py"
+REGISTER_CMD="claude mcp add -e VAULT_PATH=\"${VAULT_PATH}\" --scope user --transport stdio obsidian-search -- \"${MCP_PY}\" \"${MCP_SERVER}\""
+REGISTERED="안 함"
+if command -v claude &>/dev/null; then
+    if claude mcp get obsidian-search &>/dev/null; then
+        warn "obsidian-search 가 이미 등록돼 있다 — 건드리지 않는다. 다시 등록하려면:"
+        echo "    claude mcp remove obsidian-search --scope user"
+        echo "    ${REGISTER_CMD}"
+        REGISTERED="이미 있음"
+    elif claude mcp add -e VAULT_PATH="${VAULT_PATH}" --scope user --transport stdio obsidian-search -- "${MCP_PY}" "${MCP_SERVER}"; then
+        success "등록: obsidian-search (사용자 범위, ~/.claude.json)"
+        REGISTERED="함"
     else
-        warn "Could not load ${label} — you may need to load it manually:"
-        warn "  launchctl load ${plist_path}"
-    fi
-}
-
-load_agent "$SYNC_PLIST"    "com.user.obsidian-github-sync"
-load_agent "$BACKUP_PLIST"  "com.user.obsidian-backup"
-load_agent "$SYNAPSE_PLIST" "com.user.nightly-synapse"
-
-# ---------------------------------------------------------------------------
-# Step 8: Run first indexing
-# ---------------------------------------------------------------------------
-step "8" "Running first indexing"
-
-INDEXER="${MCP_DEST}/indexer.py"
-if [ -f "$INDEXER" ]; then
-    info "Running indexer.py (first run downloads the embedding model ~500MB)..."
-    if "${MCP_DEST}/venv/bin/python" "$INDEXER" --full 2>&1; then
-        success "First indexing complete"
-    else
-        warn "Indexing failed — you can run it manually later:"
-        warn "  cd ~/obsidian-mcp-server && ./venv/bin/python indexer.py --full"
+        warn "등록이 실패했다. 터미널에 이 한 줄을 붙여 넣는다:"
+        echo "    ${REGISTER_CMD}"
     fi
 else
-    warn "indexer.py not found in source. Skipping first indexing."
-    warn "Make sure to create it and run: cd ~/obsidian-mcp-server && ./venv/bin/python indexer.py --full"
+    warn "claude 명령이 없어서 등록하지 않았다. Claude Code를 설치한 뒤 터미널에 이 한 줄을 붙여 넣는다:"
+    echo "    ${REGISTER_CMD}"
 fi
 
 # ---------------------------------------------------------------------------
-# Summary
+# 5. 첫 색인
+# ---------------------------------------------------------------------------
+step "5. 첫 색인 (한국어 검색 모델 KURE-v1 약 2GB를 한 번 받는다)"
+if VAULT_PATH="$VAULT_PATH" "${MCP_DEST}/venv/bin/python" "${MCP_DEST}/indexer.py" --full; then
+    success "첫 색인 완료"
+else
+    warn "색인이 실패했다. 나중에 손으로: cd ~/obsidian-mcp-server && VAULT_PATH=\"${VAULT_PATH}\" ./venv/bin/python indexer.py --full"
+fi
+
+# ---------------------------------------------------------------------------
+# 끝
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${BOLD}============================================${NC}"
-echo -e "${GREEN}${BOLD}  Installation Complete!${NC}"
+echo -e "${GREEN}${BOLD}  설치 끝${NC}"
 echo -e "${BOLD}============================================${NC}"
 echo ""
-echo -e "${BOLD}What was created:${NC}"
+echo "  볼트            ${VAULT_PATH}"
+echo "  검색 서버       ~/obsidian-mcp-server/"
+echo "  Claude 등록     ${REGISTERED} — 확인: claude mcp list"
 echo ""
-echo -e "  ${GREEN}MCP Server${NC}"
-echo "    ~/obsidian-mcp-server/           Python venv + indexer + search + server"
-echo ""
-echo -e "  ${GREEN}Nightly Synapse${NC}"
-echo "    ${VAULT_PATH}/scripts/nightly-synapse/"
-echo "                                     Auto-classification + audit"
-echo ""
-echo -e "  ${GREEN}Backup & Sync${NC}"
-echo "    ~/ObsidianBackup/                sync_from_github.sh + backup_vault.sh"
-echo ""
-echo -e "  ${GREEN}Claude Config${NC}"
-echo "    ~/.claude/.mcp.json              MCP server registration"
-echo ""
-echo -e "  ${GREEN}LaunchAgents${NC}"
-echo "    com.user.obsidian-github-sync    Every 30 min"
-echo "    com.user.obsidian-backup         Daily 21:30"
-echo "    com.user.nightly-synapse         Daily 21:30"
-echo ""
-echo -e "${BOLD}Next steps:${NC}"
-echo "  1. Restart Claude Code to pick up the MCP server"
-echo "  2. Test: ask Claude 'search my notes about <topic>'"
-echo "  3. Edit bridge_keywords.py with your own keywords"
-echo "  4. (Optional) Set up CLAUDE.md in your vault root"
-echo ""
-echo -e "${BOLD}Vault path:${NC} ${VAULT_PATH}"
-echo -e "${BOLD}Ground Truth:${NC} ${GROUND_TRUTH_REL:-<not set>}"
+echo -e "${BOLD}다음:${NC}"
+echo "  1. Claude Code를 껐다 켠다"
+echo "  2. 물어 본다: 「내 노트에서 ○○ 찾아줘」"
+echo "  3. 색인은 VSCode로 볼트를 열 때 한 번 돈다 (손으로: ~/obsidian-mcp-server/auto_index.sh)"
 echo ""

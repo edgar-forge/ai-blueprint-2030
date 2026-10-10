@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "볼트를 열 때 검색 색인",
+            "detail": "VSCode가 이 볼트 폴더를 열 때 obsidian-search 색인을 한 번 돌린다. 상주 작업(launchd) 대신 이 방식.",
+            "type": "shell",
+            "command": "${env:HOME}/obsidian-mcp-server/auto_index.sh",
+            "runOptions": { "runOn": "folderOpen" },
+            "presentation": { "reveal": "silent", "panel": "dedicated", "close": true, "showReuseMessage": false },
+            "problemMatcher": []
+        }
+    ]
+}
