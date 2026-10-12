@@ -43,7 +43,7 @@ Claude, 이 파일을 읽었다면 아래를 순서대로 한다.
 2. **`vault-template/` 안의 폴더와 파일을 볼트로 복사한다.** 숨김 폴더 `.obsidian/`(옵시디언 플러그인 설정 · 단축키 · 기본 동작 설정)도 같이 복사한다. `.vscode/`는 지금 복사하지 않는다 — 검색 엔진을 붙일 때 들어간다. 그리고 `성원에게_묻기/`를 볼트 `3. Resource/성원에게_묻기/`로, `세팅/` 다섯 장을 볼트 `3. Resource/세팅/`으로 복사한다. 같은 이름의 파일이 이미 있으면 건너뛴다.
 3. **커뮤니티 플러그인 셋을 받는다.** `bash palantir/install_plugins.sh "<볼트 경로>"`를 실행한다. Calendar · Periodic Notes · Smart Typography 본체를 각 플러그인 저장소의 공식 배포 주소에서 받아 `.obsidian/plugins/`에 넣고, 틀에 들어 있던 설정값은 그대로 둔다. Importer는 묻지 않는다. 사람이 먼저 노션 · 에버노트에서 옮겨 오겠다고 말했을 때만 `--with-importer`를 붙인다. 인터넷이 없어 실패하면 `3. Resource/세팅/옵시디언.md` 3절의 직접 설치 법을 알려 주고 넘어간다.
 4. **프로젝트 카드의 끝 날짜를 적는다.** 볼트 `1. Project/세컨브레인 만들기/_카드.md`의 끝 날짜 줄에서 괄호를 통째로 지우고, 그 자리에 오늘부터 30일 뒤 날짜를 `YYYY-MM-DD`로 적는다.
-5. **볼트의 `CLAUDE.md`를 연다.** 「1. 나」 절의 세 칸(이름 · 지금 하는 일 · 원하는 것 한 줄)을 사람에게 한 번에 묻고 그대로 채운다. 문장을 다듬지 않는다 — 사람이 쓴 말 그대로.
+5. **볼트의 `CLAUDE.md`를 연다.** 「1. 나」 절의 세 칸(이름 · 지금 하는 일 · 원하는 것 한 줄)을 사람에게 한 번에 묻고, 칸마다 괄호 자리를 사람의 답으로 바꾼다. 문장을 다듬지 않는다 — 사람이 쓴 말 그대로.
 6. **오늘 날짜의 첫 일간 노트를 만든다.** 경로는 `2. Area of Responsibility/My Think/1. 일간/To_Process_Daily/YYYY. MM. DD.md`(예: `2026. 10. 07.md`), 내용은 `Templates/일간 노트.md`를 그대로 복사한다. 그리고 사람에게 "오늘 본 것 하나"를 물어, 목차 첫 줄(`>1. ` 뒤)과 첫 제목(`# 1. ` 뒤)에 같은 말을 적는다.
 7. **VS Code가 있으면 확장 둘을 넣는다.** `code` 명령이 있으면 그것으로, 없으면 맥에서는 `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code`로 `--install-extension anthropic.claude-code`와 `--install-extension ms-ceintl.vscode-language-pack-ko`를 실행한다. VS Code가 없으면 건너뛴다. 한국어 팩은 VS Code를 다시 켜면 적용된다고 알린다.
 8. **다섯 줄로 마친다.** 한국어로.
