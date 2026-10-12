@@ -36,7 +36,7 @@ claude mcp add -e VAULT_PATH="<볼트 경로>" --scope user --transport stdio ob
 내 노트에서 결정을 미루는 이유를 찾아줘
 ```
 
-Claude가 `search_notes`를 부르고 당신 노트로 답합니다.
+Claude가 `search_notes`를 부르고 내 노트로 답합니다.
 
 ## 색인은 언제 갱신되나
 
