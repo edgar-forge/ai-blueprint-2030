@@ -30,7 +30,7 @@ code --install-extension MS-CEINTL.vscode-language-pack-ko
 
 ---
 
-## 3. 볼트 폴더를 열면 Claude Code가 보인다
+## 3. 볼트 폴더를 열면 Claude Code가 보입니다
 
 1. 파일 → 폴더 열기(Open Folder)로 볼트 폴더를 엽니다.
 2. 이 폴더를 만든 사람을 신뢰하는지 물으면 신뢰한다를 고릅니다. 직접 만든 볼트라서 그렇게 해도 됩니다.
