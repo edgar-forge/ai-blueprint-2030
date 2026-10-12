@@ -24,6 +24,7 @@ Node.js · git · macOS LaunchAgents는 더 이상 필요 없습니다.
 ```
 palantir/
   setup.sh                  설치 스크립트 — 하는 일 셋
+  install_plugins.sh        옵시디언 커뮤니티 플러그인 셋을 공식 배포 주소에서 받아 볼트에 넣는다(START 3단계)
   README.md                 이 파일
   obsidian-mcp-server/      검색 서버 소스 (indexer.py · search.py · server.py · auto_index.sh · bridge_keywords.py)
   backup/                   백업 · 동기화 스크립트 — 백업하고 싶은 사람만, 비공개 저장소로 (아래)

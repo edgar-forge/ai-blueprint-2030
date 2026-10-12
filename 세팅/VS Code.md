@@ -19,7 +19,7 @@ https://code.visualstudio.com 에서 내려받아 설치합니다.
 - **Claude Code** (만든 곳 Anthropic, ID `anthropic.claude-code`): VS Code 안에서 Claude를 불러 볼트 파일을 읽고 쓰게 합니다. 처음 쓸 때 Claude 계정 로그인을 묻습니다.
 - **Korean Language Pack for Visual Studio Code** (만든 곳 Microsoft, ID `MS-CEINTL.vscode-language-pack-ko`): 메뉴를 한국어로 바꿉니다. 설치 뒤 다시 시작하라는 안내가 뜨면 따릅니다.
 
-터미널이 익숙하면 두 줄로도 됩니다.
+START로 세팅할 때 VS Code가 깔려 있으면 Claude가 이 둘을 대신 넣습니다. 직접 넣을 때 터미널이 익숙하면 두 줄로도 됩니다.
 
 ```bash
 code --install-extension anthropic.claude-code
@@ -42,9 +42,9 @@ Claude는 볼트에서 일을 시작할 때 볼트의 `CLAUDE.md`를 먼저 읽�
 
 ## 4. 검색 엔진을 깐 사람만: 볼트를 열 때 색인
 
-검색 엔진([검색 엔진.md](검색%20엔진.md))을 깔았다면 이 절을 봅니다. 깔지 않았다면 넘어가도 됩니다.
+검색 엔진은 세팅하고 1주쯤 뒤에 붙입니다([검색 엔진.md](검색%20엔진.md)). 그때 설치 스크립트가 볼트에 `.vscode/tasks.json`을 넣습니다. 그 전이면 이 절은 넘어가도 됩니다.
 
-볼트 틀의 `.vscode/tasks.json`에는 작업이 하나 들어 있습니다. VS Code가 볼트 폴더를 열 때 한 번, 바뀐 노트만 골라 검색 엔진의 찾아보기 목록(색인)을 새로 만듭니다. 컴퓨터에 늘 떠 있는 자동 작업은 만들지 않습니다. 볼트를 열 때 한 번이면 충분합니다.
+이 파일에는 작업이 하나 들어 있습니다. VS Code가 볼트 폴더를 열 때 한 번, 바뀐 노트만 골라 검색 엔진의 찾아보기 목록(색인)을 새로 만듭니다. 컴퓨터에 늘 떠 있는 자동 작업은 만들지 않습니다. 볼트를 열 때 한 번이면 충분합니다.
 
 이 작업이 저절로 돌려면 VS Code에서 자동 작업이 허용돼 있어야 합니다. 설정(Cmd+,)에서 `task.allowAutomaticTasks`를 찾아 `on`으로 둡니다. 사용자 설정 파일(settings.json)에 직접 적는다면 아래 한 줄입니다.
 
@@ -52,4 +52,4 @@ Claude는 볼트에서 일을 시작할 때 볼트의 `CLAUDE.md`를 먼저 읽�
 "task.allowAutomaticTasks": "on"
 ```
 
-검색 엔진을 깔지 않은 채 이 값이 `on`이면, 작업이 실행할 스크립트를 찾지 못해 오류로 끝날 수 있습니다. 그럴 땐 `off`로 두면 됩니다.
+START로 세팅할 때는 이 파일을 넣지 않습니다. 그래서 검색 엔진을 붙이기 전에는 이 설정을 건드릴 일이 없습니다.

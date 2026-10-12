@@ -24,6 +24,7 @@
 **나는 이렇게 쓴다(참고만)** — 「그냥 Project 나누고 AREA 나누고 Resources 나누고」 (3편 08:32)
 - → `예시/프로젝트카드/_카드.md` (프로젝트 폴더 맨 위에 두는 카드 한 장)
 - 💡 세팅하면 볼트에 `1. Project/` · `2. Area of Responsibility/` · `3. Resource/` · `4. Archives/` 네 폴더가 생긴다.
+- 💡 폴더마다 무엇을 넣고, 헷갈릴 때 어디로 보내고, 언제 옮기는지는 각 폴더의 `_여기는.md`에 있다(예: `1. Project/_여기는.md`). 슬립박스는 `0. Slip-Box/_여기는.md`.
 
 **더 보기**
 - 3편 07:54~13:14 · https://youtu.be/Pn7M9dvde4A?t=474

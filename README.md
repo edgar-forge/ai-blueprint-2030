@@ -8,11 +8,15 @@
 
 ## 첫 동작 — 링크 하나로 세팅이 끝납니다
 
-1. 이 저장소를 받습니다 — 위 초록 **Code** 버튼 → **Download ZIP**, 또는 `git clone https://github.com/edgar-forge/ai-blueprint-2030.git`
-2. 받은 폴더를 Claude Code로 엽니다 — 터미널에서 `cd ai-blueprint-2030` 그리고 `claude`
-3. 이렇게 칩니다 — **START.md를 읽고 그대로 해 줘**
+1. [Obsidian](https://obsidian.md)과 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)를 설치합니다.
+2. 터미널(글자로 컴퓨터에 명령을 치는 창)에서 `claude`를 실행하고 이렇게 칩니다 — **https://github.com/edgar-forge/ai-blueprint-2030 이 링크로 세컨브레인 세팅해 줘**
+3. Claude가 한국어로 묻는 세 가지(볼트를 둘 곳 · 당신이 누구인지 · 오늘 본 것 하나)에 답합니다.
 
-몇 분 뒤 당신 볼트가 서 있습니다 — 폴더 틀, Claude가 읽는 규칙 파일(CLAUDE.md), 오늘 날짜의 첫 노트. 검색 엔진은 [START.md](START.md)의 선택 단계입니다. 세팅은 AI가 하고, 나머지 날은 당신이 쌓는 시간입니다.
+몇 분 뒤 당신 볼트가 서 있습니다 — 폴더 틀, Claude가 읽는 규칙 파일(CLAUDE.md), 오늘 날짜의 첫 노트, 옵시디언 설정과 커뮤니티 플러그인 셋, 볼트 안의 사용법 문서. 옵시디언에서 볼트를 처음 열 때 **작성자를 신뢰하고 플러그인 사용하기**를 한 번 누르는 것만 남습니다. 검색 엔진은 1주 뒤, LLM 위키는 한 달 뒤에 붙입니다. 언제 · 왜 · 어떻게가 볼트의 `1. Project/세컨브레인 만들기/`에 들어 있습니다. 세팅은 AI가 하고, 나머지 날은 당신이 쌓는 시간입니다.
+
+저장소를 먼저 받아도 됩니다 — 초록 **Code** 버튼 → **Download ZIP**(또는 `git clone`), 받은 폴더에서 `claude`, 그리고 **START.md를 읽고 그대로 해 줘**.
+
+> **Claude에게** — 이 페이지를 링크로 받아 세팅을 부탁받았다면, 이 저장소를 받는다(`git clone https://github.com/edgar-forge/ai-blueprint-2030.git ~/Downloads/ai-blueprint-2030`, git이 없으면 main 브랜치 ZIP을 curl로 받아 푼다). 그리고 그 폴더의 [START.md](START.md) 「Claude Code가 할 일」을 처음부터 순서대로 한다. 사람에게 하는 말과 묻는 말은 전부 한국어로 한다.
 
 ---
 
@@ -24,12 +28,12 @@ START.md            첫 동작 — Claude Code에게 이 파일을 읽게 하면
 성원에게_묻기/      궁금한 것 열일곱 — 질문 하나에 파일 하나, 제가 한 말로 답합니다
 성원에게_묻기.md    위 폴더를 한 파일로 이어 붙인 것 — ChatGPT · Gemini · NotebookLM에 올릴 때
 예시/               제 볼트의 실제 노트 몇 장 — 저는 이렇게 씁니다, 참고만
-vault-template/     볼트 틀 — PARA 다섯 폴더 + Slip-Box + 개념 + 일간 · 주간, CLAUDE.md, 노트 템플릿 셋, 옵시디언 설정(.obsidian)
+vault-template/     볼트 틀 — PARA 네 폴더 + Slip-Box + 개념 + 일간 · 주간, 폴더마다 설명(_여기는.md), 처음 30일 프로젝트 폴더, CLAUDE.md, 노트 템플릿 셋, 옵시디언 설정(.obsidian)
 세팅/               제가 실제로 쓰는 세팅 다섯 장 — 옵시디언 · VS Code · 검색 엔진 · LLM 위키 · MCP 서버
 30일/               30일 커리큘럼(초안 v0, 영상 뒤에 다시 씁니다) — 1주 축적 · 2주 사용 · 3주 창조 · 4주 내 단어
-검색/               볼트 검색 엔진(로컬 시맨틱 검색 + Claude MCP) 설치 한 장
+검색/               볼트 검색 엔진(로컬 시맨틱 검색 + Claude MCP) 설치 한 장 — 세팅 1주 뒤에
 guides/             긴 가이드 세 권 — 01 AI 시대 나침반 · 02 세컨드 브레인 · 03 개인용 팔란티어
-palantir/           검색 엔진 소스와 설치 스크립트(setup.sh), 백업 스크립트(선택)
+palantir/           검색 엔진 소스와 설치 스크립트(setup.sh), 플러그인 설치 스크립트(install_plugins.sh), 백업 스크립트(선택)
 pdf/                가이드 PDF 판
 ```
 
@@ -66,7 +70,7 @@ START.md → vault-template/   ← 오늘 세팅한다 (AI가 한다)
  │
  ├─ 30일/                    ← 네 주를 돈다 (축적 → 사용 → 창조 → 내 단어)
  │
- └─ 검색/                    ← 노트가 쌓이면 뜻으로 찾는다
+ └─ 검색/                    ← 1주 뒤, 쌓인 노트를 뜻으로 찾는다
 ```
 
 ---
